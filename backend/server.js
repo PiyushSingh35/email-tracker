@@ -37,13 +37,11 @@ const emailSchema = new mongoose.Schema({
     name:  String,
     role:  { type: String, enum: ['to', 'cc', 'bcc'], default: 'to' }
   }],
-  bodyPlain:      String,
   trackingId:     { type: String, unique: true },
   createdAt:      { type: Date, default: Date.now },
   sentAt:         Date,
-  gmailMessageId: String,
-  status:         { type: String, enum: ['draft', 'sent'], default: 'sent' },
-  source:         { type: String, enum: ['dashboard', 'gmail-extension'], default: 'dashboard' }
+  status:         { type: String, enum: ['tracked', 'archived'], default: 'tracked' },
+  source:         { type: String, default: 'gmail-extension' }
 });
 
 const openEventSchema = new mongoose.Schema({
@@ -55,18 +53,7 @@ const openEventSchema = new mongoose.Schema({
   userAgent:      String,
   ipAddress:      String,
   deviceInfo:     { browser: String, os: String, device: String },
-  isFromSender:   { type: Boolean, default: false },
-  trackingMethod: { type: String, enum: ['pixel', 'link'] }
-});
-
-const linkClickSchema = new mongoose.Schema({
-  emailId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Email' },
-  linkId:         String,
-  originalUrl:    String,
-  clickedAt:      { type: Date, default: Date.now },
-  userAgent:      String,
-  ipAddress:      String,
-  deviceInfo:     { browser: String, os: String, device: String }
+  isFromSender:   { type: Boolean, default: false }
 });
 
 const userSchema = new mongoose.Schema({
@@ -81,7 +68,6 @@ const userSchema = new mongoose.Schema({
 
 const Email      = mongoose.model('Email',      emailSchema);
 const OpenEvent  = mongoose.model('OpenEvent',  openEventSchema);
-const LinkClick  = mongoose.model('LinkClick',  linkClickSchema);
 const User       = mongoose.model('User',       userSchema);
 
 // ─────────────────────────────────────────
@@ -95,8 +81,6 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile'
 ];
@@ -160,10 +144,6 @@ async function authMiddleware(req, res, next) {
     const user    = await User.findById(decoded.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
     req.user = user;
-    oauth2Client.setCredentials({
-      refresh_token: user.refreshToken,
-      access_token:  user.accessToken
-    });
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid token' });
@@ -202,19 +182,6 @@ function isSender(ip, user) {
   return senderSet.has(ip);
 }
 
-function wrapLinks(html, emailId, serverUrl) {
-  const linkMap = [];
-  const wrapped = html.replace(
-    /href="(https?:\/\/[^"]+)"/gi,
-    (match, url) => {
-      const linkId = generateId();
-      linkMap.push({ linkId, originalUrl: url, emailId });
-      return `href="${serverUrl}/track/link/${linkId}"`;
-    }
-  );
-  return { wrapped, linkMap };
-}
-
 // 1x1 transparent GIF
 const PIXEL_GIF = Buffer.from(
   'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
@@ -246,8 +213,7 @@ app.get('/track/pixel/:trackingId', async (req, res) => {
           userAgent:      req.headers['user-agent'],
           ipAddress:      ip,
           deviceInfo:     parseUA(req.headers['user-agent']),
-          isFromSender:   false,
-          trackingMethod: 'pixel'
+          isFromSender:   false
         });
       }
     }
@@ -265,62 +231,13 @@ app.get('/track/pixel/:trackingId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// LINK TRACKING
-// ─────────────────────────────────────────
-
-app.get('/track/link/:linkId', async (req, res) => {
-  try {
-    const { linkId } = req.params;
-    const link = await LinkClick.findOne({ linkId });
-    if (!link) return res.status(404).send('Link not found');
-
-    const ip    = getIP(req);
-    const email = await Email.findById(link.emailId);
-    const user  = email ? await User.findOne({ email: email.senderEmail }) : null;
-
-    if (!isSender(ip, user)) {
-      link.clickedAt  = new Date();
-      link.userAgent  = req.headers['user-agent'];
-      link.ipAddress  = ip;
-      link.deviceInfo = parseUA(req.headers['user-agent']);
-      await link.save();
-
-      await OpenEvent.create({
-        emailId:        link.emailId,
-        trackingId:     email?.trackingId,
-        recipientEmail: 'unknown',
-        recipientRole:  'unknown',
-        userAgent:      req.headers['user-agent'],
-        ipAddress:      ip,
-        deviceInfo:     parseUA(req.headers['user-agent']),
-        isFromSender:   false,
-        trackingMethod: 'link'
-      });
-    }
-
-    res.redirect(link.originalUrl);
-  } catch (e) {
-    console.error('Link tracking error:', e.message);
-    res.status(500).send('Error');
-  }
-});
-
-// ─────────────────────────────────────────
-// GMAIL EXTENSION - REGISTER EMAIL
+// EXTENSION - REGISTER TRACKED EMAIL
 // ─────────────────────────────────────────
 
 app.post('/api/track/register', authMiddleware, async (req, res) => {
   try {
     const { subject, recipients, source } = req.body;
     const trackingId = generateId();
-    const serverUrl  = process.env.SERVER_URL;
-
-    // Build per-recipient pixel URLs
-    const pixelUrls = recipients.map(r => ({
-      email: r.email,
-      role:  r.role,
-      pixel: `${serverUrl}/track/pixel/${trackingId}?r=${encodeURIComponent(r.email)}&role=${r.role}`
-    }));
 
     const email = await Email.create({
       senderEmail: req.user.email,
@@ -328,7 +245,7 @@ app.post('/api/track/register', authMiddleware, async (req, res) => {
       recipients,
       trackingId,
       sentAt:  new Date(),
-      status:  'sent',
+      status:  'tracked',
       source:  source || 'gmail-extension'
     });
 
@@ -336,103 +253,10 @@ app.post('/api/track/register', authMiddleware, async (req, res) => {
       success:    true,
       emailId:    email._id,
       trackingId,
-      pixelUrls,
-      // Combined pixel for single injection
-      pixelUrl: `${serverUrl}/track/pixel/${trackingId}`
+      pixelUrl: `${process.env.SERVER_URL}/track/pixel/${trackingId}`
     });
   } catch (error) {
     console.error('Register error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─────────────────────────────────────────
-// SEND EMAIL VIA DASHBOARD
-// ─────────────────────────────────────────
-
-app.post('/api/send', authMiddleware, async (req, res) => {
-  try {
-    const { subject, body, recipients, trackLinks } = req.body;
-    const trackingId = generateId();
-    const serverUrl  = process.env.SERVER_URL;
-
-    // Build per-recipient pixel (combined)
-    const pixelUrl = `${serverUrl}/track/pixel/${trackingId}?r=${encodeURIComponent(recipients[0].email)}&role=to`;
-
-    let finalBody = body;
-    let linkDocs  = [];
-
-    if (trackLinks) {
-      const { wrapped, linkMap } = wrapLinks(body, null, serverUrl);
-      finalBody = wrapped;
-      linkDocs  = linkMap;
-    }
-
-    // Append tracking pixel
-    finalBody += `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none!important;width:1px!important;height:1px!important;opacity:0!important;" />`;
-
-    const email = await Email.create({
-      senderEmail: req.user.email,
-      subject,
-      recipients:  recipients.map(r => ({ ...r, role: r.role || 'to' })),
-      bodyPlain:   body,
-      trackingId,
-      sentAt:      new Date(),
-      status:      'sent',
-      source:      'dashboard'
-    });
-
-    if (linkDocs.length) {
-      for (const ld of linkDocs) {
-        await LinkClick.create({
-          emailId:     email._id,
-          linkId:      ld.linkId,
-          originalUrl: ld.originalUrl
-        });
-      }
-    }
-
-    // Build and send Gmail MIME message
-    const toField  = recipients.map(r => r.name ? `${r.name} <${r.email}>` : r.email).join(', ');
-    const boundary = `boundary_${generateId()}`;
-    const mime = [
-      `From: ${req.user.name} <${req.user.email}>`,
-      `To: ${toField}`,
-      `Subject: ${subject}`,
-      `MIME-Version: 1.0`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      '',
-      `--${boundary}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      '',
-      body.replace(/<[^>]+>/g, ''),
-      '',
-      `--${boundary}`,
-      'Content-Type: text/html; charset="UTF-8"',
-      '',
-      finalBody,
-      '',
-      `--${boundary}--`
-    ].join('\r\n');
-
-    const encoded = Buffer.from(mime)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-
-    const gmail  = google.gmail({ version: 'v1', auth: oauth2Client });
-    const result = await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: { raw: encoded }
-    });
-
-    email.gmailMessageId = result.data.id;
-    await email.save();
-
-    res.json({ success: true, emailId: email._id, trackingId });
-  } catch (error) {
-    console.error('Send error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -456,7 +280,7 @@ app.put('/api/me/ips', authMiddleware, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// GET ALL EMAILS
+// GET ALL TRACKED EMAILS
 // ─────────────────────────────────────────
 
 app.get('/api/emails', authMiddleware, async (req, res) => {
@@ -466,7 +290,12 @@ app.get('/api/emails', authMiddleware, async (req, res) => {
     const enriched = await Promise.all(emails.map(async (em) => {
       const openCount = await OpenEvent.countDocuments({ emailId: em._id, isFromSender: false });
       const lastOpen  = await OpenEvent.findOne({ emailId: em._id, isFromSender: false }).sort({ openedAt: -1 });
-      return { ...em.toObject(), openCount, lastOpenedAt: lastOpen?.openedAt || null };
+      return { 
+        ...em.toObject(), 
+        openCount, 
+        lastOpenedAt: lastOpen?.openedAt || null,
+        unopened: openCount === 0
+      };
     }));
 
     res.json(enriched);
@@ -476,7 +305,7 @@ app.get('/api/emails', authMiddleware, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// EMAIL ANALYTICS (with per-recipient breakdown)
+// EMAIL ANALYTICS (Per-recipient breakdown)
 // ─────────────────────────────────────────
 
 app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
@@ -484,8 +313,7 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
     const email = await Email.findById(req.params.id);
     if (!email) return res.status(404).json({ error: 'Email not found' });
 
-    const opens  = await OpenEvent.find({ emailId: email._id, isFromSender: false }).sort({ openedAt: 1 });
-    const clicks = await LinkClick.find({ emailId: email._id });
+    const opens = await OpenEvent.find({ emailId: email._id, isFromSender: false }).sort({ openedAt: 1 });
 
     // Build per-recipient map
     const recipientMap = {};
@@ -497,7 +325,8 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
         opens:      [],
         openCount:  0,
         firstOpen:  null,
-        lastOpen:   null
+        lastOpen:   null,
+        status:     'unopened'
       };
     });
 
@@ -507,11 +336,11 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
       if (recipientMap[key]) {
         recipientMap[key].opens.push({
           openedAt: o.openedAt,
-          device:   o.deviceInfo,
-          method:   o.trackingMethod
+          device:   o.deviceInfo
         });
         recipientMap[key].openCount++;
         recipientMap[key].lastOpen  = o.openedAt;
+        recipientMap[key].status    = 'opened';
         if (!recipientMap[key].firstOpen) {
           recipientMap[key].firstOpen = o.openedAt;
         }
@@ -548,18 +377,13 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
       opens:      opens.map(o => ({
         openedAt:  o.openedAt,
         device:    o.deviceInfo,
-        method:    o.trackingMethod,
         ip:        o.ipAddress,
         recipient: o.recipientEmail,
         role:      o.recipientRole
       })),
       byRole,
       opensByDate,
-      devices,
-      linkClicks: clicks.map(c => ({
-        url:       c.originalUrl,
-        clickedAt: c.clickedAt
-      }))
+      devices
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -575,13 +399,11 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
     const emailIds      = await Email.find({ senderEmail: req.user.email }).distinct('_id');
     const totalEmails   = emailIds.length;
     const totalOpens    = await OpenEvent.countDocuments({ emailId: { $in: emailIds }, isFromSender: false });
-    const totalClicks   = await LinkClick.countDocuments({ emailId: { $in: emailIds } });
     const openedIds     = await OpenEvent.find({ emailId: { $in: emailIds }, isFromSender: false }).distinct('emailId');
 
     res.json({
       totalEmails,
       totalOpens,
-      totalClicks,
       openRate: totalEmails ? Math.round((openedIds.length / totalEmails) * 100) : 0
     });
   } catch (error) {
@@ -597,7 +419,6 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
   try {
     await Email.findByIdAndDelete(req.params.id);
     await OpenEvent.deleteMany({ emailId: req.params.id });
-    await LinkClick.deleteMany({ emailId: req.params.id });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -618,6 +439,6 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 Email Tracker running at http://localhost:${PORT}`);
+  console.log(`\n🚀 MailPulse running at http://localhost:${PORT}`);
   console.log(`📧 Login at http://localhost:${PORT}/auth/google\n`);
 });
