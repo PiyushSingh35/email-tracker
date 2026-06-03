@@ -386,26 +386,30 @@
   // ─────────────────────────────────────────
 
   async function checkAuth() {
+    console.log('🔐 Checking authentication...');
+    
     const urlParams = new URLSearchParams(window.location.search);
     TOKEN = urlParams.get('token') || localStorage.getItem('mailpulse_token');
 
     if (!TOKEN) {
+      console.log('❌ No token found');
       document.getElementById('loginScreen').style.display = 'flex';
       return;
     }
-    // Send token to Chrome extension if present
-localStorage.setItem('mailpulse_token', TOKEN);
-window.history.replaceState({}, document.title, '/');
 
-// Send token to Chrome extension
-setTimeout(() => {
-  window.postMessage({ 
-    type: 'MAILPULSE_TOKEN', 
-    token: TOKEN 
-  }, '*');
-  console.log('📤 Token sent to extension:', TOKEN.substring(0, 10) + '...');
-}, 100);
-    window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
+    console.log('✅ Token found:', TOKEN.substring(0, 10) + '...');
+    localStorage.setItem('mailpulse_token', TOKEN);
+    window.history.replaceState({}, document.title, '/');
+
+    // Send token to Chrome extension
+    console.log('📤 Sending token to extension...');
+    setTimeout(() => {
+      window.postMessage({ 
+        type: 'MAILPULSE_TOKEN', 
+        token: TOKEN 
+      }, '*');
+      console.log('✉️ Token message posted to extension');
+    }, 100);
 
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('mainApp').classList.add('active');
@@ -415,10 +419,12 @@ setTimeout(() => {
   }
 
   function loginWithGoogle() {
+    console.log('🔗 Redirecting to Google login...');
     window.location.href = `${SERVER}/auth/google`;
   }
 
   function logout() {
+    console.log('🚪 Logging out...');
     localStorage.removeItem('mailpulse_token');
     TOKEN = null;
     location.reload();
@@ -430,28 +436,34 @@ setTimeout(() => {
 
   async function loadUserInfo() {
     try {
+      console.log('👤 Loading user info...');
       const res = await fetch(`${SERVER}/api/me`, {
         headers: { Authorization: `Bearer ${TOKEN}` }
       });
       const user = await res.json();
+      console.log('✅ User loaded:', user.email);
       document.getElementById('userEmail').textContent = user.email;
     } catch (e) {
-      console.error('Error loading user:', e);
+      console.error('❌ Error loading user:', e);
     }
   }
 
   async function loadEmails() {
     try {
+      console.log('📧 Loading emails...');
       const res = await fetch(`${SERVER}/api/emails`, {
         headers: { Authorization: `Bearer ${TOKEN}` }
       });
       const emails = await res.json();
+      console.log('✅ Emails loaded:', emails.length);
 
       // Update stats
+      console.log('📊 Loading stats...');
       const stats = await fetch(`${SERVER}/api/stats`, {
         headers: { Authorization: `Bearer ${TOKEN}` }
       }).then(r => r.json());
 
+      console.log('✅ Stats:', stats);
       document.getElementById('statEmails').textContent = stats.totalEmails;
       document.getElementById('statOpens').textContent = stats.totalOpens;
       document.getElementById('statRate').textContent = stats.openRate + '%';
@@ -483,16 +495,18 @@ setTimeout(() => {
         selectEmail(emails[0]._id);
       }
     } catch (e) {
-      console.error('Error loading emails:', e);
+      console.error('❌ Error loading emails:', e);
     }
   }
 
   async function selectEmail(emailId) {
     try {
+      console.log('🔍 Loading analytics for email:', emailId);
       const res = await fetch(`${SERVER}/api/emails/${emailId}/analytics`, {
         headers: { Authorization: `Bearer ${TOKEN}` }
       });
       const data = await res.json();
+      console.log('✅ Analytics loaded:', data);
 
       // Update header
       document.getElementById('analyticsSubject').textContent = data.email.subject || '(No Subject)';
@@ -512,7 +526,7 @@ setTimeout(() => {
       document.querySelectorAll('.email-item').forEach(el => el.classList.remove('active'));
       event.currentTarget.classList.add('active');
     } catch (e) {
-      console.error('Error loading analytics:', e);
+      console.error('❌ Error loading analytics:', e);
     }
   }
 
@@ -541,6 +555,7 @@ setTimeout(() => {
   }
 
   // Initialize
+  console.log('🚀 MailPulse Dashboard initializing...');
   checkAuth();
 </script>
 
