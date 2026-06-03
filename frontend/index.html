@@ -517,6 +517,9 @@ function checkAuth() {
 
   if (urlToken) {
     TOKEN = urlToken;
+    if (TOKEN) {
+    window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
+    }
     localStorage.setItem('mp_token', urlToken);
     window.history.replaceState({}, '', '/');
   } else {
