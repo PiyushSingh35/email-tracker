@@ -394,11 +394,17 @@
       return;
     }
     // Send token to Chrome extension if present
-    localStorage.setItem('mailpulse_token', TOKEN);
-    window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
-    window.history.replaceState({}, document.title, '/');
+localStorage.setItem('mailpulse_token', TOKEN);
+window.history.replaceState({}, document.title, '/');
 
-    // Send token to extension
+// Send token to Chrome extension
+setTimeout(() => {
+  window.postMessage({ 
+    type: 'MAILPULSE_TOKEN', 
+    token: TOKEN 
+  }, '*');
+  console.log('📤 Token sent to extension:', TOKEN.substring(0, 10) + '...');
+}, 100);
     window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
 
     document.getElementById('loginScreen').style.display = 'none';
