@@ -393,8 +393,9 @@
       document.getElementById('loginScreen').style.display = 'flex';
       return;
     }
-
+    // Send token to Chrome extension if present
     localStorage.setItem('mailpulse_token', TOKEN);
+    window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
     window.history.replaceState({}, document.title, '/');
 
     // Send token to extension
