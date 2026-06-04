@@ -32,7 +32,7 @@
     .stat-box{padding:14px;text-align:center;border-right:1px solid #334155}
     .stat-num{font-size:22px;font-weight:700;color:#6366f1;font-family:monospace}
     .stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
-    .sidebar-list-title{padding:12px 14px 6px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+    .sidebar-list-title{padding:12px 14px 6px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600;display:flex;justify-content:space-between;align-items:center}
     .email-list{flex:1;overflow-y:auto;padding:0 8px 8px}
     .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:11px 12px;margin-bottom:5px;cursor:pointer;transition:all .15s}
     .email-card:hover,.email-card.active{border-color:#6366f1;background:#1e293b}
@@ -72,8 +72,9 @@
     .recip-unopen{color:#f87171}
     .recip-count{font-size:11px;color:#64748b;margin-left:6px}
 
-    .refresh-btn{float:right;padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:5px;cursor:pointer;font-size:11px}
+    .refresh-btn{padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:5px;cursor:pointer;font-size:11px}
     .refresh-btn:hover{background:#475569}
+    .refresh-btn:disabled{opacity:0.6;cursor:not-allowed}
 
     @media(max-width:768px){.layout{grid-template-columns:1fr}.sidebar{height:45vh}}
   </style>
@@ -105,7 +106,7 @@
         <div class="stat-box"><div class="stat-num" id="statOpens">0</div><div class="stat-lbl">Opens</div></div>
         <div class="stat-box"><div class="stat-num" id="statRate">0%</div><div class="stat-lbl">Rate</div></div>
       </div>
-      <div class="sidebar-list-title">Tracked Emails <button class="refresh-btn" id="btnRefresh">↻ Refresh</button></div>
+      <div class="sidebar-list-title"><span>Tracked Emails</span><button class="refresh-btn" id="btnRefresh">↻ Refresh</button></div>
       <div class="email-list" id="emailList">
         <div class="no-emails">No tracked emails yet.<br>Compose or reply in Gmail<br>with the extension active.</div>
       </div>
@@ -135,8 +136,6 @@
 
     localStorage.setItem('mailpulse_token', TOKEN);
     window.history.replaceState({}, '', '/');
-    
-    // Notify extension IMMEDIATELY
     broadcastToken(TOKEN);
 
     show('app');
@@ -156,15 +155,18 @@
   });
 
   document.getElementById('btnLogoutHeader').addEventListener('click', logout);
+  
   document.getElementById('btnRefresh').addEventListener('click', async function() {
     const btn = this;
-    btn.textContent = '↻ Refreshing...'; // Visual feedback!
+    btn.textContent = '↻ Refreshing...';
     btn.style.opacity = '0.7';
-    await loadEmails();
+    btn.disabled = true;
+    await Promise.all([loadStats(), loadEmails()]);
     setTimeout(() => {
       btn.textContent = '↻ Refresh';
       btn.style.opacity = '1';
-    }, 500); // Wait half a second so it doesn't flicker too fast
+      btn.disabled = false;
+    }, 500);
   });
 
   function logout() {
@@ -332,10 +334,31 @@
   }
 
   function renderFallback(data) {
+    if (!data.email) return;
+    const email = data.email;
+    const byRole = data.byRole || { to: [], cc: [], bcc: [] };
     document.getElementById('mainPanel').innerHTML = `
       <div class="detail-head">
-        <div class="detail-subject">${data.email?.subject || '(No Subject)'}</div>
-      </div>`;
+        <div class="detail-subject">${email.subject || '(No Subject)'}</div>
+        <div class="detail-meta">
+          <span><strong>Sent:</strong> ${new Date(email.sentAt).toLocaleString()}</span>
+          <span><strong>Recipients:</strong> ${email.recipients?.length || 0}</span>
+          <span><strong>Opens:</strong> ${data.totalOpens || 0}</span>
+        </div>
+      </div>
+      <div class="thread-wrap">
+        <div class="thread-node">
+          <div class="node-head">
+            <div class="node-title-row">
+              <div class="node-subject">📧 ${email.subject || '(No Subject)'}</div>
+              <div class="node-date">${new Date(email.sentAt).toLocaleString()}</div>
+            </div>
+            <div class="node-stats">${data.totalOpens || 0} opens · ${email.recipients?.length || 0} recipients</div>
+            ${renderRecips(byRole)}
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   setInterval(() => { if (TOKEN) { loadStats(); loadEmails(); } }, 15000);
