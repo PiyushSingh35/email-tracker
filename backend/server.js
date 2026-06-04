@@ -503,6 +503,10 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
 // SERVE FRONTEND
 // ─────────────────────────────────────────
 
+
+// Health check - keeps Render awake
+app.get("/ping", (req, res) => res.json({ status: "ok", time: new Date() }));
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
@@ -511,8 +515,4 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`\n🚀 MailPulse running at http://localhost:${PORT}`);
   console.log(`📧 Login at http://localhost:${PORT}/auth/google\n`);
-});
-// Health check - keeps Render awake
-app.get('/ping', (req, res) => {
-  res.json({ status: 'ok', time: new Date() });
 });

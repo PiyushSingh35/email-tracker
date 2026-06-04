@@ -7,11 +7,11 @@
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
-    
+
     /* LOGIN */
-    .login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a,#1e293b)}
+    .login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
     .login-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:48px 40px;max-width:420px;width:90%;text-align:center}
-    .login-logo{font-size:48px;margin-bottom:12px}
+    .login-logo{font-size:52px;margin-bottom:12px}
     .login-title{font-size:28px;font-weight:800;background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px}
     .login-sub{color:#64748b;font-size:14px;margin-bottom:32px;line-height:1.6}
     .btn-google{width:100%;padding:14px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;transition:all .2s}
@@ -20,127 +20,122 @@
     /* APP */
     .app{display:none;min-height:100vh}
     .app.active{display:block}
-    
+
     /* HEADER */
-    .header{background:#1e293b;border-bottom:1px solid #334155;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
-    .header-logo{font-size:20px;font-weight:800;background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .header-user{display:flex;align-items:center;gap:12px;font-size:13px;color:#94a3b8}
-    .btn-logout{padding:6px 14px;background:#334155;color:#94a3b8;border:none;border-radius:6px;cursor:pointer;font-size:13px}
-    .btn-logout:hover{background:#475569;color:#e2e8f0}
+    .header{background:#1e293b;border-bottom:1px solid #334155;padding:0 24px;height:56px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
+    .header-logo{font-size:18px;font-weight:800;background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .header-right{display:flex;align-items:center;gap:12px}
+    .header-email{font-size:12px;color:#64748b}
+    .btn-logout{padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+    .btn-logout:hover{background:#dc2626;color:white;border-color:#dc2626}
 
     /* LAYOUT */
-    .layout{display:grid;grid-template-columns:380px 1fr;min-height:calc(100vh - 57px)}
-    
+    .layout{display:grid;grid-template-columns:360px 1fr;height:calc(100vh - 56px)}
+
     /* SIDEBAR */
-    .sidebar{background:#1e293b;border-right:1px solid #334155;overflow-y:auto}
-    .sidebar-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#334155;border-bottom:1px solid #334155}
-    .stat-box{background:#1e293b;padding:16px;text-align:center}
-    .stat-num{font-size:24px;font-weight:700;color:#6366f1;font-family:monospace}
+    .sidebar{background:#1e293b;border-right:1px solid #334155;display:flex;flex-direction:column;overflow:hidden}
+    .stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #334155}
+    .stat-box{padding:14px;text-align:center;border-right:1px solid #334155}
+    .stat-box:last-child{border-right:none}
+    .stat-num{font-size:22px;font-weight:700;color:#6366f1;font-family:monospace}
     .stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
-    
-    .sidebar-title{padding:16px 16px 8px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-    .email-list{padding:0 8px 8px}
-    .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:6px;cursor:pointer;transition:all .15s}
-    .email-card:hover,.email-card.active{background:#1e293b;border-color:#6366f1}
-    .email-card-subject{font-size:13px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .email-card-meta{font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center}
-    .email-card-badges{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+    .sidebar-list-title{padding:12px 14px 6px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+    .email-list{flex:1;overflow-y:auto;padding:0 8px 8px}
+    .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:11px 12px;margin-bottom:5px;cursor:pointer;transition:all .15s}
+    .email-card:hover,.email-card.active{border-color:#6366f1;background:#1e293b}
+    .ec-subject{font-size:13px;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ec-meta{font-size:11px;color:#64748b;display:flex;justify-content:space-between}
+    .ec-badges{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
     .badge{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
-    .badge-opened{background:#064e3b;color:#34d399}
-    .badge-unopened{background:#450a0a;color:#f87171}
-    .badge-reply{background:#1e1b4b;color:#818cf8;font-size:10px}
-    
+    .b-open{background:#064e3b;color:#34d399}
+    .b-unopen{background:#450a0a;color:#f87171}
+    .b-reply{background:#1e1b4b;color:#818cf8}
+    .no-emails{text-align:center;padding:32px 16px;color:#475569;font-size:13px;line-height:1.6}
+
     /* MAIN PANEL */
-    .main-panel{padding:24px;overflow-y:auto}
-    .empty-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#334155;text-align:center;gap:12px}
-    .empty-panel-icon{font-size:64px}
-    .empty-panel-text{font-size:16px;color:#475569}
+    .main-panel{overflow-y:auto;padding:20px}
+    .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#334155;text-align:center;gap:10px}
+    .empty-icon{font-size:56px}
+    .empty-text{font-size:15px;color:#475569}
 
-    /* EMAIL DETAIL */
-    .detail-header{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:16px}
-    .detail-subject{font-size:20px;font-weight:700;margin-bottom:12px}
-    .detail-meta{display:flex;gap:20px;font-size:12px;color:#64748b;flex-wrap:wrap}
-    .detail-meta span strong{color:#94a3b8}
+    /* DETAIL */
+    .detail-head{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;margin-bottom:14px}
+    .detail-subject{font-size:19px;font-weight:700;margin-bottom:10px}
+    .detail-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#64748b}
+    .detail-meta strong{color:#94a3b8}
 
-    /* THREAD TREE */
-    .thread-section{margin-bottom:16px}
-    .thread-title{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;font-weight:600}
-    
-    .thread-node{margin-bottom:8px}
-    .thread-node-header{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;cursor:pointer;transition:all .15s}
-    .thread-node-header:hover{border-color:#6366f1}
-    .thread-node-header.reply-node{margin-left:24px;border-left:3px solid #6366f1}
-    .thread-node-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .thread-node-subject{font-size:13px;font-weight:600}
-    .thread-node-date{font-size:11px;color:#64748b}
-    
+    /* THREAD */
+    .thread-wrap{display:flex;flex-direction:column;gap:10px}
+    .thread-node{border-radius:10px;overflow:hidden}
+    .node-head{background:#1e293b;border:1px solid #334155;padding:14px;cursor:default}
+    .node-head.is-reply{border-left:3px solid #6366f1;margin-left:20px}
+    .node-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+    .node-subject{font-size:13px;font-weight:600}
+    .node-date{font-size:11px;color:#64748b}
+    .node-stats{font-size:11px;color:#64748b;margin-bottom:8px}
+
     /* RECIPIENTS */
-    .recipients-section{margin-top:10px}
-    .role-group{margin-bottom:8px}
-    .role-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;font-weight:600}
-    .recipient-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0f172a;border-radius:6px;margin-bottom:4px;font-size:12px}
-    .recipient-email{font-weight:500}
-    .recipient-status-open{color:#34d399;font-weight:600}
-    .recipient-status-unopen{color:#f87171}
-    .recipient-opens-count{color:#64748b;font-size:11px}
+    .role-section{margin-bottom:8px}
+    .role-title{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:5px}
+    .recip-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#0f172a;border-radius:6px;margin-bottom:3px;font-size:12px}
+    .recip-email{font-weight:500;color:#cbd5e1}
+    .recip-open{color:#34d399;font-weight:600}
+    .recip-unopen{color:#f87171}
+    .recip-count{font-size:11px;color:#64748b;margin-left:6px}
 
-    /* REPLIES TREE */
-    .replies-container{margin-top:8px;padding-left:24px;border-left:2px solid #334155}
-    .reply-label{font-size:11px;color:#6366f1;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+    /* REPLIES */
+    .replies-wrap{margin-top:6px}
+    .replies-label{font-size:11px;color:#6366f1;font-weight:700;padding:6px 0;display:flex;align-items:center;gap:5px}
 
-    /* NO EMAILS */
-    .no-emails{text-align:center;padding:40px 20px;color:#475569}
+    /* REFRESH */
+    .refresh-btn{float:right;padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:5px;cursor:pointer;font-size:11px}
+    .refresh-btn:hover{background:#475569}
 
-    @media(max-width:768px){
-      .layout{grid-template-columns:1fr}
-      .sidebar{max-height:50vh}
-    }
+    @media(max-width:768px){.layout{grid-template-columns:1fr}.sidebar{height:45vh}}
   </style>
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="loginScreen" class="login-screen">
   <div class="login-box">
     <div class="login-logo">📧</div>
     <div class="login-title">MailPulse</div>
     <p class="login-sub">Track every email you send via Gmail.<br>See who opened, when, and how many times.</p>
     <button class="btn-google" onclick="loginWithGoogle()">Sign in with Google</button>
-    <p style="font-size:11px;color:#334155;margin-top:16px">
-      Install the Chrome extension to start tracking your Gmail emails automatically.
-    </p>
   </div>
 </div>
 
-<!-- MAIN APP -->
+<!-- APP -->
 <div id="app" class="app">
   <div class="header">
     <div class="header-logo">📧 MailPulse</div>
-    <div class="header-user">
-      <span id="userEmail">Loading...</span>
+    <div class="header-right">
+      <span class="header-email" id="userEmail"></span>
       <button class="btn-logout" onclick="logout()">Logout</button>
     </div>
   </div>
 
   <div class="layout">
-    <!-- SIDEBAR -->
     <div class="sidebar">
-      <div class="sidebar-stats">
+      <div class="stats-row">
         <div class="stat-box"><div class="stat-num" id="statEmails">0</div><div class="stat-lbl">Emails</div></div>
         <div class="stat-box"><div class="stat-num" id="statOpens">0</div><div class="stat-lbl">Opens</div></div>
         <div class="stat-box"><div class="stat-num" id="statRate">0%</div><div class="stat-lbl">Rate</div></div>
       </div>
-      <div class="sidebar-title">Tracked Emails</div>
+      <div class="sidebar-list-title">
+        Tracked Emails
+        <button class="refresh-btn" onclick="loadEmails()">↻ Refresh</button>
+      </div>
       <div class="email-list" id="emailList">
-        <div class="no-emails">No emails tracked yet.<br>Use the Chrome extension.</div>
+        <div class="no-emails">No tracked emails yet.<br>Compose or reply in Gmail<br>with the extension active.</div>
       </div>
     </div>
 
-    <!-- MAIN PANEL -->
     <div class="main-panel" id="mainPanel">
-      <div class="empty-panel">
-        <div class="empty-panel-icon">📬</div>
-        <div class="empty-panel-text">Select an email to see tracking details</div>
+      <div class="empty-state">
+        <div class="empty-icon">📬</div>
+        <div class="empty-text">Select an email to view tracking details</div>
       </div>
     </div>
   </div>
@@ -150,254 +145,200 @@
   let TOKEN = null;
   const SERVER = 'https://email-tracker-em6b.onrender.com';
 
-  // ─────────────────────────────────────────
-  // AUTH
-  // ─────────────────────────────────────────
+  // ── AUTH ──────────────────────────────────────────
   async function checkAuth() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlToken  = urlParams.get('token');
-    TOKEN = urlToken || localStorage.getItem('mailpulse_token');
+    const params = new URLSearchParams(window.location.search);
+    TOKEN = params.get('token') || localStorage.getItem('mailpulse_token');
 
-    if (!TOKEN) {
-      document.getElementById('loginScreen').style.display = 'flex';
-      return;
-    }
+    if (!TOKEN) { show('loginScreen'); return; }
 
     localStorage.setItem('mailpulse_token', TOKEN);
-    window.history.replaceState({}, document.title, '/');
+    window.history.replaceState({}, '', '/');
 
-    // Send token to Chrome extension
-    setTimeout(() => {
-      window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
-      console.log('📤 Token sent to extension');
-    }, 200);
+    // Notify extension of login
+    window.postMessage({ type: 'MAILPULSE_TOKEN', token: TOKEN }, '*');
 
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('app').classList.add('active');
-
-    await loadAll();
+    show('app');
+    await Promise.all([loadUser(), loadStats(), loadEmails()]);
   }
 
   function loginWithGoogle() {
-    window.location.href = `${SERVER}/auth/google`;
+    window.location.href = SERVER + '/auth/google';
   }
 
   function logout() {
     localStorage.removeItem('mailpulse_token');
-    location.reload();
+    TOKEN = null;
+    // Notify extension of logout
+    window.postMessage({ type: 'MAILPULSE_LOGOUT' }, '*');
+    show('loginScreen');
+    document.getElementById('app').classList.remove('active');
   }
 
-  // ─────────────────────────────────────────
-  // LOAD ALL DATA
-  // ─────────────────────────────────────────
-  async function loadAll() {
-    await Promise.all([loadUser(), loadStats(), loadEmails()]);
+  function show(id) {
+    document.getElementById('loginScreen').style.display = id === 'loginScreen' ? 'flex' : 'none';
+    if (id === 'app') document.getElementById('app').classList.add('active');
   }
 
+  // ── LOAD DATA ─────────────────────────────────────
   async function loadUser() {
     try {
-      const res  = await fetch(`${SERVER}/api/me`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      const user = await res.json();
-      document.getElementById('userEmail').textContent = user.email;
-    } catch(e) { console.error(e); }
+      const r = await apiFetch('/api/me');
+      document.getElementById('userEmail').textContent = r.email;
+    } catch(e) {}
   }
 
   async function loadStats() {
     try {
-      const res   = await fetch(`${SERVER}/api/stats`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      const stats = await res.json();
-      document.getElementById('statEmails').textContent = stats.totalEmails;
-      document.getElementById('statOpens').textContent  = stats.totalOpens;
-      document.getElementById('statRate').textContent   = stats.openRate + '%';
-    } catch(e) { console.error(e); }
+      const s = await apiFetch('/api/stats');
+      document.getElementById('statEmails').textContent = s.totalEmails;
+      document.getElementById('statOpens').textContent  = s.totalOpens;
+      document.getElementById('statRate').textContent   = s.openRate + '%';
+    } catch(e) {}
   }
 
   async function loadEmails() {
     try {
-      const res    = await fetch(`${SERVER}/api/emails`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      const emails = await res.json();
+      const emails = await apiFetch('/api/emails');
       renderEmailList(emails);
-      if (emails.length > 0) loadThread(emails[0]._id);
+      if (emails.length > 0) loadThread(emails[0]._id, true);
     } catch(e) { console.error(e); }
   }
 
-  // ─────────────────────────────────────────
-  // RENDER SIDEBAR EMAIL LIST
-  // ─────────────────────────────────────────
+  async function apiFetch(path) {
+    const r = await fetch(SERVER + path, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    if (!r.ok) throw new Error('API error');
+    return r.json();
+  }
+
+  // ── RENDER EMAIL LIST ─────────────────────────────
   function renderEmailList(emails) {
     const list = document.getElementById('emailList');
     if (!emails.length) {
-      list.innerHTML = '<div class="no-emails">No emails tracked yet.<br>Use the Chrome extension in Gmail.</div>';
+      list.innerHTML = '<div class="no-emails">No tracked emails yet.<br>Use the Chrome extension<br>to start tracking.</div>';
       return;
     }
-
     list.innerHTML = emails.map((em, i) => `
-      <div class="email-card ${i === 0 ? 'active' : ''}" onclick="selectEmail(this, '${em._id}')">
-        <div class="email-card-subject">${em.subject || '(No Subject)'}</div>
-        <div class="email-card-meta">
+      <div class="email-card ${i === 0 ? 'active' : ''}" id="card-${em._id}" onclick="selectCard(this,'${em._id}')">
+        <div class="ec-subject">${em.subject || '(No Subject)'}</div>
+        <div class="ec-meta">
           <span>${new Date(em.sentAt).toLocaleDateString()}</span>
           <span>${em.recipients?.length || 0} recipient${em.recipients?.length !== 1 ? 's' : ''}</span>
         </div>
-        <div class="email-card-badges">
-          <span class="badge ${em.unopened ? 'badge-unopened' : 'badge-opened'}">
+        <div class="ec-badges">
+          <span class="badge ${em.unopened ? 'b-unopen' : 'b-open'}">
             ${em.unopened ? '✗ Unopened' : '✓ Opened ' + em.openCount + 'x'}
           </span>
-          ${em.replyCount > 0 ? `<span class="badge badge-reply">↩ ${em.replyCount} repl${em.replyCount > 1 ? 'ies' : 'y'}</span>` : ''}
+          ${(em.replyCount || 0) > 0 ? `<span class="badge b-reply">↩ ${em.replyCount} follow-up${em.replyCount > 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
     `).join('');
   }
 
-  function selectEmail(el, emailId) {
+  function selectCard(el, id) {
     document.querySelectorAll('.email-card').forEach(c => c.classList.remove('active'));
     el.classList.add('active');
-    loadThread(emailId);
+    loadThread(id, false);
   }
 
-  // ─────────────────────────────────────────
-  // LOAD THREAD AND RENDER
-  // ─────────────────────────────────────────
-  async function loadThread(emailId) {
+  // ── LOAD THREAD ───────────────────────────────────
+  async function loadThread(id, isFirst) {
     try {
-      const res  = await fetch(`${SERVER}/api/emails/${emailId}/thread`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      const data = await res.json();
+      const data = await apiFetch(`/api/emails/${id}/thread`);
       renderThread(data.thread);
     } catch(e) {
-      console.error(e);
       // Fallback to analytics
-      loadAnalytics(emailId);
+      try {
+        const data = await apiFetch(`/api/emails/${id}/analytics`);
+        renderFallback(data);
+      } catch(e2) { console.error(e2); }
     }
   }
 
-  async function loadAnalytics(emailId) {
-    try {
-      const res  = await fetch(`${SERVER}/api/emails/${emailId}/analytics`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      const data = await res.json();
-      renderSingleEmail(data);
-    } catch(e) { console.error(e); }
-  }
-
-  // ─────────────────────────────────────────
-  // RENDER THREAD TREE
-  // ─────────────────────────────────────────
+  // ── RENDER THREAD ─────────────────────────────────
   function renderThread(thread) {
     if (!thread) return;
-    const panel = document.getElementById('mainPanel');
-
-    const totalReplies = countReplies(thread);
-
-    panel.innerHTML = `
-      <div class="detail-header">
+    const totalFollowups = countReplies(thread);
+    document.getElementById('mainPanel').innerHTML = `
+      <div class="detail-head">
         <div class="detail-subject">${thread.subject || '(No Subject)'}</div>
         <div class="detail-meta">
           <span><strong>Sent:</strong> ${new Date(thread.sentAt).toLocaleString()}</span>
           <span><strong>Recipients:</strong> ${thread.recipients?.length || 0}</span>
           <span><strong>Opens:</strong> ${thread.totalOpens || 0}</span>
-          ${totalReplies > 0 ? `<span><strong>Follow-ups:</strong> ${totalReplies}</span>` : ''}
+          ${totalFollowups > 0 ? `<span><strong>Follow-ups:</strong> ${totalFollowups}</span>` : ''}
         </div>
       </div>
-      <div class="thread-section">
-        <div class="thread-title">📧 Email Thread</div>
-        ${renderThreadNode(thread, false)}
-      </div>
+      <div class="thread-wrap">${renderNode(thread, false)}</div>
     `;
   }
 
-  function countReplies(node) {
-    if (!node.replies || node.replies.length === 0) return 0;
-    return node.replies.length + node.replies.reduce((sum, r) => sum + countReplies(r), 0);
+  function countReplies(n) {
+    return (n.replies?.length || 0) + (n.replies || []).reduce((s, r) => s + countReplies(r), 0);
   }
 
-  function renderThreadNode(node, isReply) {
-    const recipientsHtml = renderRecipientBreakdown(node.byRole);
-
-    const repliesHtml = node.replies && node.replies.length > 0 ? `
-      <div class="replies-container">
-        <div class="reply-label">↩ ${node.replies.length} Follow-up${node.replies.length > 1 ? 's' : ''}</div>
-        ${node.replies.map(r => renderThreadNode(r, true)).join('')}
-      </div>
-    ` : '';
+  function renderNode(node, isReply) {
+    const byRole     = node.byRole || { to: [], cc: [], bcc: [] };
+    const recipHtml  = renderRecips(byRole);
+    const repliesHtml = (node.replies?.length > 0) ? `
+      <div class="replies-wrap">
+        <div class="replies-label">↩ ${node.replies.length} Follow-up${node.replies.length > 1 ? 's' : ''}</div>
+        ${node.replies.map(r => renderNode(r, true)).join('')}
+      </div>` : '';
 
     return `
       <div class="thread-node">
-        <div class="thread-node-header ${isReply ? 'reply-node' : ''}">
-          <div class="thread-node-title">
-            <div class="thread-node-subject">
-              ${isReply ? '↩ ' : '📧 '}${node.subject || '(No Subject)'}
-            </div>
-            <div class="thread-node-date">${new Date(node.sentAt).toLocaleString()}</div>
+        <div class="node-head ${isReply ? 'is-reply' : ''}">
+          <div class="node-title-row">
+            <div class="node-subject">${isReply ? '↩ ' : '📧 '}${node.subject || '(No Subject)'}</div>
+            <div class="node-date">${new Date(node.sentAt).toLocaleString()}</div>
           </div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:8px">
-            ${node.totalOpens || 0} open${node.totalOpens !== 1 ? 's' : ''} · 
-            ${node.recipients?.length || 0} recipient${node.recipients?.length !== 1 ? 's' : ''}
-          </div>
-          ${recipientsHtml}
+          <div class="node-stats">${node.totalOpens || 0} open${node.totalOpens !== 1 ? 's' : ''} · ${node.recipients?.length || 0} recipient${node.recipients?.length !== 1 ? 's' : ''}</div>
+          ${recipHtml}
         </div>
         ${repliesHtml}
-      </div>
-    `;
+      </div>`;
   }
 
-  function renderRecipientBreakdown(byRole) {
-    if (!byRole) return '';
-    let html = '<div class="recipients-section">';
-
-    const roles = [
-      { key: 'to',  label: 'TO' },
-      { key: 'cc',  label: 'CC' },
-      { key: 'bcc', label: 'BCC' }
-    ];
-
-    roles.forEach(({ key, label }) => {
-      const recipients = byRole[key] || [];
-      if (recipients.length === 0) return;
-      html += `<div class="role-group"><div class="role-label">${label}</div>`;
-      recipients.forEach(r => {
-        html += `
-          <div class="recipient-row">
-            <span class="recipient-email">${r.email}</span>
-            <span>
-              ${r.status === 'opened'
-                ? `<span class="recipient-status-open">✓ Opened</span> <span class="recipient-opens-count">${r.openCount}x · Last: ${new Date(r.lastOpen).toLocaleDateString()}</span>`
-                : `<span class="recipient-status-unopen">✗ Never opened</span>`
-              }
-            </span>
-          </div>
-        `;
+  function renderRecips(byRole) {
+    let html = '';
+    [['to','TO'],['cc','CC'],['bcc','BCC']].forEach(([key, lbl]) => {
+      const list = byRole[key] || [];
+      if (!list.length) return;
+      html += `<div class="role-section"><div class="role-title">${lbl}</div>`;
+      list.forEach(r => {
+        html += `<div class="recip-row">
+          <span class="recip-email">${r.email}</span>
+          <span>
+            ${r.status === 'opened'
+              ? `<span class="recip-open">✓ Opened</span><span class="recip-count">${r.openCount}x · ${new Date(r.lastOpen).toLocaleDateString()}</span>`
+              : `<span class="recip-unopen">✗ Never opened</span>`}
+          </span>
+        </div>`;
       });
       html += '</div>';
     });
-
-    html += '</div>';
     return html;
   }
 
-  function renderSingleEmail(data) {
-    const panel = document.getElementById('mainPanel');
-    panel.innerHTML = `
-      <div class="detail-header">
+  function renderFallback(data) {
+    document.getElementById('mainPanel').innerHTML = `
+      <div class="detail-head">
         <div class="detail-subject">${data.email?.subject || '(No Subject)'}</div>
         <div class="detail-meta">
           <span><strong>Sent:</strong> ${new Date(data.email?.sentAt).toLocaleString()}</span>
           <span><strong>Opens:</strong> ${data.totalOpens || 0}</span>
         </div>
       </div>
-      <div class="thread-section">
-        ${renderRecipientBreakdown(data.byRole)}
-      </div>
-    `;
+      <div class="thread-wrap">
+        <div class="node-head">${renderRecips(data.byRole || { to:[], cc:[], bcc:[] })}</div>
+      </div>`;
   }
 
-  // Start
-  checkAuth();
+  // Auto-refresh every 15 seconds
+  setInterval(() => { if (TOKEN) { loadStats(); loadEmails(); } }, 15000);
 
-  // Auto-refresh every 30 seconds for real-time updates
-  setInterval(() => {
-    if (TOKEN) {
-      loadStats();
-      loadEmails();
-    }
-  }, 30000);
+  checkAuth();
 </script>
 </body>
 </html>
