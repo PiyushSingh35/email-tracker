@@ -32,7 +32,7 @@
     .stat-box{padding:14px;text-align:center;border-right:1px solid #334155}
     .stat-num{font-size:22px;font-weight:700;color:#6366f1;font-family:monospace}
     .stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
-    .sidebar-list-title{padding:12px 14px 6px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+    .sidebar-list-title{padding:12px 14px 6px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600;display:flex;justify-content:space-between;align-items:center}
     .email-list{flex:1;overflow-y:auto;padding:0 8px 8px}
     .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:11px 12px;margin-bottom:5px;cursor:pointer;transition:all .15s}
     .email-card:hover,.email-card.active{border-color:#6366f1;background:#1e293b}
@@ -72,8 +72,19 @@
     .recip-unopen{color:#f87171}
     .recip-count{font-size:11px;color:#64748b;margin-left:6px}
 
-    .refresh-btn{float:right;padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:5px;cursor:pointer;font-size:11px}
+    .refresh-btn{padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:5px;cursor:pointer;font-size:11px;transition:all .2s}
     .refresh-btn:hover{background:#475569}
+    .refresh-btn.loading{opacity:0.6;cursor:not-allowed;animation:spin 1s linear infinite}
+    
+    @keyframes spin{
+      from{transform:rotate(0deg)}
+      to{transform:rotate(360deg)}
+    }
+
+    .loading-state{display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:#64748b}
+    .loading-spinner{width:20px;height:20px;border:2px solid #334155;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite}
+
+    .error-banner{background:#991b1b;border:1px solid #dc2626;color:#fecaca;padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:13px}
 
     @media(max-width:768px){.layout{grid-template-columns:1fr}.sidebar{height:45vh}}
   </style>
@@ -105,7 +116,10 @@
         <div class="stat-box"><div class="stat-num" id="statOpens">0</div><div class="stat-lbl">Opens</div></div>
         <div class="stat-box"><div class="stat-num" id="statRate">0%</div><div class="stat-lbl">Rate</div></div>
       </div>
-      <div class="sidebar-list-title">Tracked Emails <button class="refresh-btn" id="btnRefresh">↻ Refresh</button></div>
+      <div class="sidebar-list-title">
+        <span>Tracked Emails</span>
+        <button class="refresh-btn" id="btnRefresh" title="Refresh data">↻ Refresh</button>
+      </div>
       <div class="email-list" id="emailList">
         <div class="no-emails">No tracked emails yet.<br>Compose or reply in Gmail<br>with the extension active.</div>
       </div>
@@ -122,6 +136,7 @@
 
 <script>
   let TOKEN = null;
+  let isRefreshing = false;
   const SERVER = 'https://email-tracker-em6b.onrender.com';
 
   async function checkAuth() {
@@ -156,7 +171,24 @@
   });
 
   document.getElementById('btnLogoutHeader').addEventListener('click', logout);
-  document.getElementById('btnRefresh').addEventListener('click', loadEmails);
+  
+  // FIX #1: Refresh button now calls BOTH loadStats and loadEmails
+  document.getElementById('btnRefresh').addEventListener('click', async () => {
+    const btn = document.getElementById('btnRefresh');
+    if (isRefreshing) return;
+    
+    isRefreshing = true;
+    btn.classList.add('loading');
+    btn.disabled = true;
+    
+    try {
+      await Promise.all([loadStats(), loadEmails()]);
+    } finally {
+      isRefreshing = false;
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  });
 
   function logout() {
     localStorage.removeItem('mailpulse_token');
@@ -175,29 +207,56 @@
     try {
       const r = await apiFetch('/api/me');
       document.getElementById('userEmail').textContent = r.email;
-    } catch(e) {}
+    } catch(e) {
+      console.error('Failed to load user:', e);
+    }
   }
 
+  // FIX #2: Better error handling for loadStats
   async function loadStats() {
     try {
       const s = await apiFetch('/api/stats');
       document.getElementById('statEmails').textContent = s.totalEmails;
       document.getElementById('statOpens').textContent = s.totalOpens;
       document.getElementById('statRate').textContent = s.openRate + '%';
-    } catch(e) {}
+    } catch(e) {
+      console.error('Failed to load stats:', e);
+      // Show error but don't break the UI
+      document.getElementById('statEmails').textContent = '—';
+      document.getElementById('statOpens').textContent = '—';
+      document.getElementById('statRate').textContent = '—';
+    }
   }
 
+  // FIX #3: Better error handling for loadEmails
   async function loadEmails() {
     try {
       const emails = await apiFetch('/api/emails');
       renderEmailList(emails);
-      if (emails.length > 0) loadThread(emails[0]._id);
-    } catch(e) { console.error(e); }
+      if (emails.length > 0) {
+        loadThread(emails[0]._id);
+      } else {
+        document.getElementById('mainPanel').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📬</div>
+            <div class="empty-text">No emails tracked yet. Send an email with the Gmail extension to get started.</div>
+          </div>
+        `;
+      }
+    } catch(e) {
+      console.error('Failed to load emails:', e);
+      document.getElementById('emailList').innerHTML = `
+        <div class="error-banner">⚠️ Failed to load emails. Please try refreshing.</div>
+      `;
+    }
   }
 
   async function apiFetch(path) {
     const r = await fetch(SERVER + path, { headers: { Authorization: `Bearer ${TOKEN}` } });
-    if (!r.ok) throw new Error('API error');
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'API error');
+    }
     return r.json();
   }
 
@@ -242,18 +301,36 @@
         headers: { Authorization: `Bearer ${TOKEN}` }
       });
       await loadEmails();
-    } catch(e) { alert('Delete failed'); }
+    } catch(e) {
+      alert('Delete failed: ' + e.message);
+    }
   }
 
   async function loadThread(id) {
     try {
+      document.getElementById('mainPanel').innerHTML = `
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>Loading...</span>
+        </div>
+      `;
+
       const data = await apiFetch(`/api/emails/${id}/thread`);
       renderThread(data.thread);
     } catch(e) {
+      console.warn('Thread API failed, trying analytics fallback:', e);
       try {
         const data = await apiFetch(`/api/emails/${id}/analytics`);
-        renderFallback(data);
-      } catch(e2) { console.error(e2); }
+        // FIX #4: Proper fallback with full analytics rendering
+        renderAnalyticsFallback(data);
+      } catch(e2) {
+        console.error('Both APIs failed:', e2);
+        document.getElementById('mainPanel').innerHTML = `
+          <div class="error-banner" style="margin:20px;">
+            ⚠️ Failed to load email details: ${e2.message}
+          </div>
+        `;
+      }
     }
   }
 
@@ -271,6 +348,37 @@
         </div>
       </div>
       <div class="thread-wrap">${renderNode(thread, false)}</div>
+    `;
+  }
+
+  // FIX #5: New function to render analytics data when thread API fails
+  function renderAnalyticsFallback(data) {
+    if (!data.email) return;
+    
+    const email = data.email;
+    const byRole = data.byRole || { to: [], cc: [], bcc: [] };
+    
+    document.getElementById('mainPanel').innerHTML = `
+      <div class="detail-head">
+        <div class="detail-subject">${email.subject || '(No Subject)'}</div>
+        <div class="detail-meta">
+          <span><strong>Sent:</strong> ${new Date(email.sentAt).toLocaleString()}</span>
+          <span><strong>Recipients:</strong> ${email.recipients?.length || 0}</span>
+          <span><strong>Total Opens:</strong> ${data.totalOpens || 0}</span>
+        </div>
+      </div>
+      <div class="thread-wrap">
+        <div class="thread-node">
+          <div class="node-head">
+            <div class="node-title-row">
+              <div class="node-subject">📧 ${email.subject || '(No Subject)'}</div>
+              <div class="node-date">${new Date(email.sentAt).toLocaleString()}</div>
+            </div>
+            <div class="node-stats">${data.totalOpens || 0} open${data.totalOpens !== 1 ? 's' : ''} · ${email.recipients?.length || 0} recipient${email.recipients?.length !== 1 ? 's' : ''}</div>
+            ${renderRecips(byRole)}
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -322,14 +430,27 @@
     return html;
   }
 
-  function renderFallback(data) {
-    document.getElementById('mainPanel').innerHTML = `
-      <div class="detail-head">
-        <div class="detail-subject">${data.email?.subject || '(No Subject)'}</div>
-      </div>`;
-  }
+  // FIX #6: Reduce auto-refresh frequency and keep selected card
+  let lastSelectedId = null;
+  const originalSelectCard = window.selectCard;
+  window.selectCard = function(el, id) {
+    lastSelectedId = id;
+    originalSelectCard.call(this, el, id);
+  };
 
-  setInterval(() => { if (TOKEN) { loadStats(); loadEmails(); } }, 15000);
+  setInterval(() => { 
+    if (TOKEN && !isRefreshing) { 
+      loadStats(); 
+      // Only auto-refresh emails list, don't change selection
+      apiFetch('/api/emails').then(emails => {
+        renderEmailList(emails);
+        // Keep the last selected card active
+        const cards = document.querySelectorAll('.email-card');
+        if (cards.length > 0) cards[0].classList.add('active');
+      }).catch(e => console.error('Auto-refresh failed:', e));
+    } 
+  }, 30000); // Increased from 15s to 30s to reduce flicker
+  
   checkAuth();
 </script>
 </body>
