@@ -39,7 +39,6 @@ const emailSchema = new mongoose.Schema({
   sentAt:         Date,
   status:         { type: String, enum: ['tracked', 'archived'], default: 'tracked' },
   source:         { type: String, default: 'gmail-extension' },
-  // Thread/reply support
   parentEmailId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Email', default: null },
   threadId:       { type: String, default: null },
   isReply:        { type: Boolean, default: false },
@@ -161,22 +160,25 @@ function generateId() {
 }
 
 function parseUA(ua) {
-  const parser = new UAParser(ua);
+  // Added fallback to prevent crashes if UA is undefined
+  const parser = new UAParser(ua || '');
   const r = parser.getResult();
   return {
-    browser: r.browser.name || 'Unknown',
-    os:      r.os.name      || 'Unknown',
-    device:  r.device.type  || 'Desktop'
+    browser: r.browser?.name || 'Unknown',
+    os:      r.os?.name      || 'Unknown',
+    device:  r.device?.type  || 'Desktop'
   };
 }
 
 function getIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0].trim()
-    || req.socket.remoteAddress;
+  // Added safe fallback for remoteAddress
+  return (req.headers['x-forwarded-for']?.split(',')[0].trim()) 
+    || req.socket?.remoteAddress 
+    || 'unknown';
 }
 
 function isSender(ip, user) {
-  if (!user) return false;
+  if (!user || ip === 'unknown') return false;
   const senderSet = new Set([
     ...(user.senderIPs || []),
     '127.0.0.1', '::1', '::ffff:127.0.0.1'
@@ -195,8 +197,14 @@ const PIXEL_GIF = Buffer.from(
 app.get('/track/pixel/:trackingId', async (req, res) => {
   try {
     const { trackingId } = req.params;
-    const recipientEmail = req.query.r    || 'unknown';
-    const recipientRole  = req.query.role || 'unknown';
+    const recipientEmail = req.query.r || 'unknown';
+    
+    // FIX: Sanitize the role to prevent Mongoose validation crashes
+    let recipientRole = (req.query.role || 'unknown').toLowerCase();
+    const validRoles = ['to', 'cc', 'bcc', 'unknown'];
+    if (!validRoles.includes(recipientRole)) {
+      recipientRole = 'unknown'; 
+    }
 
     const email = await Email.findOne({ trackingId });
 
@@ -211,20 +219,23 @@ app.get('/track/pixel/:trackingId', async (req, res) => {
           trackingId,
           recipientEmail,
           recipientRole,
-          userAgent:      req.headers['user-agent'],
+          userAgent:      req.headers['user-agent'] || 'unknown',
           ipAddress:      ip,
           deviceInfo:     parseUA(req.headers['user-agent']),
           isFromSender:   false
         });
       }
+    } else {
+      console.log(`Tracking attempt failed: ID ${trackingId} not found in database.`);
     }
   } catch (e) {
-    console.error('Pixel error:', e.message);
+    console.error('Pixel tracking error:', e.message);
   }
 
+  // Enforce rigid caching rules so Gmail doesn't cache the image
   res.set({
     'Content-Type':  'image/gif',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
     'Pragma':        'no-cache',
     'Expires':       '0'
   });
@@ -244,7 +255,6 @@ app.post('/api/track/register', authMiddleware, async (req, res) => {
 
     const trackingId = generateId();
 
-    // If this is a reply, find parent to link thread
     let resolvedParentId = null;
     let resolvedThreadId = threadId || generateId();
     let resolvedDepth    = replyDepth || 0;
@@ -308,7 +318,6 @@ app.put('/api/me/ips', authMiddleware, async (req, res) => {
 
 app.get('/api/emails', authMiddleware, async (req, res) => {
   try {
-    // Only get top-level emails (not replies)
     const emails = await Email.find({
       senderEmail:   req.user.email,
       parentEmailId: null
@@ -343,13 +352,11 @@ app.get('/api/emails/:id/thread', authMiddleware, async (req, res) => {
     const rootEmail = await Email.findById(req.params.id);
     if (!rootEmail) return res.status(404).json({ error: 'Email not found' });
 
-    // Get all emails in this thread
     const allInThread = await Email.find({
       threadId:    rootEmail.threadId,
       senderEmail: req.user.email
     }).sort({ sentAt: 1 });
 
-    // Enrich each with open data
     const enriched = await Promise.all(allInThread.map(async (em) => {
       const opens = await OpenEvent.find({ emailId: em._id, isFromSender: false }).sort({ openedAt: 1 });
 
@@ -388,7 +395,6 @@ app.get('/api/emails/:id/thread', authMiddleware, async (req, res) => {
       };
     }));
 
-    // Build tree structure
     function buildTree(emails, parentId = null) {
       return emails
         .filter(e => String(e.parentEmailId) === String(parentId))
@@ -502,7 +508,6 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
 // ─────────────────────────────────────────
 // SERVE FRONTEND
 // ─────────────────────────────────────────
-
 
 // Health check - keeps Render awake
 app.get("/ping", (req, res) => res.json({ status: "ok", time: new Date() }));
