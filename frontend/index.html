@@ -9,60 +9,87 @@
     body{font-family:-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
     .login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
     .login-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:48px 40px;text-align:center}
-    .btn-google{padding:14px;background:#6366f1;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer}
+    .btn-google{padding:14px 24px;background:#6366f1;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:15px}
+    .btn-google:hover{background:#4f46e5}
     .app{display:none;min-height:100vh;flex-direction:column}
     .app.active{display:flex}
-    .header{background:#1e293b;padding:0 24px;height:56px;display:flex;justify-content:space-between;align-items:center}
-    .layout{display:grid;grid-template-columns:360px 1fr;flex:1}
-    .sidebar{background:#1e293b;border-right:1px solid #334155;display:flex;flex-direction:column}
-    .stats-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #334155;text-align:center}
+    .header{background:#1e293b;padding:0 24px;height:56px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155}
+    .layout{display:grid;grid-template-columns:360px 1fr;flex:1;min-height:0}
+    .sidebar{background:#1e293b;border-right:1px solid #334155;display:flex;flex-direction:column;overflow:hidden}
+    .stats-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #334155;text-align:center;flex-shrink:0}
     .stat-box{padding:14px;border-right:1px solid #334155}
     .stat-num{font-size:22px;font-weight:700;color:#6366f1}
+    .toolbar{padding:8px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;flex-shrink:0}
+    .auto-badge{font-size:10px;color:#64748b;padding:2px 6px;background:#0f172a;border-radius:4px}
     .email-list{flex:1;overflow-y:auto;padding:8px}
-    .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:11px 12px;margin-bottom:5px;cursor:pointer}
+    .email-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:11px 12px;margin-bottom:5px;cursor:pointer;transition:border-color .15s}
+    .email-card:hover{border-color:#475569}
     .email-card.active{border-color:#6366f1;background:#1e293b}
-    .ec-subject{font-size:13px;font-weight:600;margin-bottom:5px}
+    .ec-subject{font-size:13px;font-weight:600;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .badge{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
     .b-open{background:#064e3b;color:#34d399}
     .b-unopen{background:#450a0a;color:#f87171}
-    .main-panel{padding:20px;overflow-y:auto}
-    .thread-node{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:18px;margin-bottom:10px}
-    .node-subject{font-size:18px;font-weight:700;margin-bottom:5px}
-    .recip-list{font-size:12px;color:#94a3b8;margin-bottom:15px}
+    .main-panel{padding:24px;overflow-y:auto}
+    .thread-node{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:20px;margin-bottom:12px}
+    .node-subject{font-size:20px;font-weight:700;margin-bottom:6px}
+    .meta-row{font-size:12px;color:#64748b;margin-bottom:4px}
+    .recip-list{font-size:12px;color:#94a3b8;margin-bottom:16px}
     .history-box{border-top:1px solid #334155;padding-top:15px}
-    .h-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px}
-    .open-row{font-size:13px;color:#cbd5e1;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+    .h-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px;letter-spacing:.05em}
+    .open-row{font-size:13px;color:#cbd5e1;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:8px}
     .open-row:last-child{border:none}
+    .open-tag{background:#064e3b;color:#34d399;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;flex-shrink:0}
+    .empty-state{text-align:center;color:#475569;padding:40px 20px;font-size:14px}
+    button.btn-sm{padding:4px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+    button.btn-sm:hover{background:#475569}
+    button.btn-sm:disabled{opacity:0.5;cursor:not-allowed}
+    button.btn-danger{padding:6px 12px;background:#dc2626;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+    button.btn-danger:hover{background:#b91c1c}
   </style>
 </head>
 <body>
 
 <div id="loginScreen" class="login-screen">
-  <div class="login-box"><h2>MailPulse</h2><button class="btn-google" id="btnLoginGoogle">Sign in with Google</button></div>
+  <div class="login-box">
+    <div style="font-size:28px;font-weight:800;color:#6366f1;margin-bottom:8px">MailPulse</div>
+    <p style="color:#64748b;margin-bottom:24px;font-size:14px">Track every email you send from Gmail</p>
+    <button class="btn-google" id="btnLoginGoogle">Sign in with Google</button>
+  </div>
 </div>
 
 <div id="app" class="app">
   <div class="header">
-    <div style="font-weight:bold;color:#6366f1">MailPulse</div>
-    <button id="btnLogout" style="padding:6px 12px;background:#dc2626;color:white;border:none;border-radius:4px;cursor:pointer">Logout</button>
+    <div style="font-weight:800;color:#6366f1;font-size:16px">MailPulse</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="headerEmail" style="font-size:12px;color:#64748b"></span>
+      <button class="btn-danger" id="btnLogout">Logout</button>
+    </div>
   </div>
   <div class="layout">
     <div class="sidebar">
       <div class="stats-row">
-        <div class="stat-box"><div class="stat-num" id="statEmails">0</div><div style="font-size:10px;color:#64748b">EMAILS</div></div>
-        <div class="stat-box"><div class="stat-num" id="statOpens">0</div><div style="font-size:10px;color:#64748b">TOTAL OPENS</div></div>
+        <div class="stat-box"><div class="stat-num" id="statEmails">0</div><div style="font-size:10px;color:#64748b;margin-top:2px">EMAILS</div></div>
+        <div class="stat-box"><div class="stat-num" id="statOpens">0</div><div style="font-size:10px;color:#64748b;margin-top:2px">TOTAL OPENS</div></div>
       </div>
-      <div style="padding:10px;text-align:right"><button id="btnRefresh" style="padding:4px 8px;background:#334155;color:white;border:none;border-radius:4px;cursor:pointer">↻ Refresh</button></div>
+      <div class="toolbar">
+        <span class="auto-badge" id="refreshStatus">Auto-refresh: on</span>
+        <button class="btn-sm" id="btnRefresh">↻ Refresh</button>
+      </div>
       <div class="email-list" id="emailList"></div>
     </div>
-    <div class="main-panel" id="mainPanel"></div>
+    <div class="main-panel" id="mainPanel">
+      <div class="empty-state">Select an email to see tracking details</div>
+    </div>
   </div>
 </div>
 
 <script>
   let TOKEN = null;
-  let CURRENT_EMAIL_ID = null; // This remembers which email you are looking at!
+  let CURRENT_EMAIL_ID = null;
+  let AUTO_REFRESH_TIMER = null;
   const SERVER = 'https://email-tracker-em6b.onrender.com';
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
 
   async function checkAuth() {
     TOKEN = new URLSearchParams(window.location.search).get('token') || localStorage.getItem('mailpulse_token');
@@ -71,64 +98,80 @@
     window.history.replaceState({}, '', '/');
     window.postMessage({ type: 'MAILPULSE_TOKEN_SYNC', token: TOKEN }, '*');
     show('app');
-    loadStats(); loadEmails();
+    await Promise.all([loadStats(), loadEmails()]);
+    startAutoRefresh();
   }
 
   document.getElementById('btnLoginGoogle').onclick = () => window.location.href = SERVER + '/auth/google';
-  document.getElementById('btnLogout').onclick = () => { localStorage.removeItem('mailpulse_token'); window.location.reload(); };
-  
-  // 🚨 THE FIX: Brought back the visual animation!
-  document.getElementById('btnRefresh').onclick = async function() {
-    const btn = this;
-    btn.textContent = '↻ Refreshing...';
-    btn.style.opacity = '0.5';
-    btn.disabled = true;
-    
-    await Promise.all([loadStats(), loadEmails()]);
-    
-    setTimeout(() => {
-      btn.textContent = '↻ Refresh';
-      btn.style.opacity = '1';
-      btn.disabled = false;
-    }, 400);
+
+  document.getElementById('btnLogout').onclick = () => {
+    stopAutoRefresh();
+    localStorage.removeItem('mailpulse_token');
+    window.location.reload();
   };
 
   function show(id) {
     document.getElementById('loginScreen').style.display = id === 'loginScreen' ? 'flex' : 'none';
-    if(id === 'app') document.getElementById('app').classList.add('active');
+    if (id === 'app') document.getElementById('app').classList.add('active');
   }
 
-  async function apiFetch(path) {
-    const r = await fetch(SERVER + path, { headers: { Authorization: `Bearer ${TOKEN}` } });
-    return r.json();
+  // ── API ───────────────────────────────────────────────────────────────────
+
+  // FIX: error handling — checks HTTP status and catches network errors
+  async function apiFetch(endpoint) {
+    try {
+      const r = await fetch(SERVER + endpoint, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      if (!r.ok) {
+        if (r.status === 401) { localStorage.removeItem('mailpulse_token'); window.location.reload(); return null; }
+        console.error('MailPulse API error:', r.status, endpoint);
+        return null;
+      }
+      return await r.json();
+    } catch (e) {
+      console.error('MailPulse fetch error:', e.message, endpoint);
+      return null;
+    }
   }
+
+  // ── Data loaders ──────────────────────────────────────────────────────────
 
   async function loadStats() {
     const s = await apiFetch('/api/stats');
-    document.getElementById('statEmails').textContent = s.totalEmails;
-    document.getElementById('statOpens').textContent = s.totalOpens;
+    if (!s) return;
+    document.getElementById('statEmails').textContent = s.totalEmails || 0;
+    document.getElementById('statOpens').textContent  = s.totalOpens  || 0;
   }
 
-  // 🚨 THE FIX: Remembers your selected email after a refresh!
   async function loadEmails() {
     const emails = await apiFetch('/api/emails');
-    document.getElementById('emailList').innerHTML = emails.map((em, i) => {
-      const isActive = CURRENT_EMAIL_ID ? em._id === CURRENT_EMAIL_ID : i === 0;
-      return `
-      <div class="email-card ${isActive ? 'active' : ''}" onclick="selectCard(this,'${em._id}')">
-        <div class="ec-subject">${em.subject || '(No Subject)'}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span class="badge ${em.unopened ? 'b-unopen' : 'b-open'}">${em.unopened ? '✗ Unopened' : '✓ ' + em.openCount + ' Opens'}</span>
-          <span style="font-size:10px;color:#64748b">${new Date(em.sentAt).toLocaleDateString()}</span>
-        </div>
-      </div>`;
-    }).join('') || '<div style="text-align:center;color:#64748b;padding:20px">No emails tracked yet.</div>';
-    
-    if(emails.length) {
-      const idToLoad = CURRENT_EMAIL_ID && emails.some(e => e._id === CURRENT_EMAIL_ID) ? CURRENT_EMAIL_ID : emails[0]._id;
-      if (!CURRENT_EMAIL_ID) CURRENT_EMAIL_ID = idToLoad;
-      loadThread(idToLoad);
+    if (!emails) return;
+
+    const list = document.getElementById('emailList');
+    if (!emails.length) {
+      list.innerHTML = '<div class="empty-state">No tracked emails yet.<br>Compose an email and click<br><strong>✓ Activate Tracking</strong>.</div>';
+      return;
     }
+
+    list.innerHTML = emails.map((em, i) => {
+      const isActive = CURRENT_EMAIL_ID ? em._id === CURRENT_EMAIL_ID : i === 0;
+      const date = new Date(em.sentAt).toLocaleDateString();
+      const badge = em.unopened
+        ? `<span class="badge b-unopen">✗ Unopened</span>`
+        : `<span class="badge b-open">✓ ${em.openCount} Open${em.openCount !== 1 ? 's' : ''}</span>`;
+      return `
+        <div class="email-card ${isActive ? 'active' : ''}" onclick="selectCard(this,'${em._id}')">
+          <div class="ec-subject">${escHtml(em.subject || '(No Subject)')}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            ${badge}
+            <span style="font-size:10px;color:#64748b">${date}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    const idToLoad = CURRENT_EMAIL_ID && emails.some(e => e._id === CURRENT_EMAIL_ID)
+      ? CURRENT_EMAIL_ID : emails[0]._id;
+    if (!CURRENT_EMAIL_ID) CURRENT_EMAIL_ID = idToLoad;
+    loadThread(idToLoad);
   }
 
   function selectCard(el, id) {
@@ -140,30 +183,72 @@
 
   async function loadThread(id) {
     const data = await apiFetch(`/api/emails/${id}/thread`);
+    if (!data || !data.thread) {
+      document.getElementById('mainPanel').innerHTML = '<div class="empty-state">Could not load email details.</div>';
+      return;
+    }
     const t = data.thread;
-    const recips = t.recipients.map(r => r.email).join(', ');
-    
-    let historyHtml = '<div style="color:#f87171;font-size:13px;padding:10px 0">✗ This email has not been opened yet.</div>';
-    if (t.totalOpens > 0) {
-      historyHtml = t.opens.map(o => `
+    const recips = (t.recipients || []).map(r =>
+      `<span style="background:#0f172a;padding:2px 8px;border-radius:4px;margin:2px;display:inline-block">
+        ${escHtml(r.email)} <span style="color:#475569;font-size:10px">${r.role.toUpperCase()}</span>
+      </span>`
+    ).join('');
+
+    let historyHtml;
+    if (!t.totalOpens) {
+      historyHtml = '<div style="color:#f87171;font-size:13px;padding:12px 0">✗ Not opened yet.</div>';
+    } else {
+      historyHtml = (t.opens || []).map(o => `
         <div class="open-row">
-          <span style="color:#34d399;font-weight:bold;margin-right:10px">✓ Opened</span>
-          ${new Date(o.time).toLocaleString()} <span style="color:#64748b;font-size:11px;margin-left:10px">(${o.browser || 'Unknown Browser'} on ${o.os || 'Unknown Device'})</span>
-        </div>
-      `).join('');
+          <span class="open-tag">✓ OPENED</span>
+          <span style="color:#e2e8f0">${new Date(o.time).toLocaleString()}</span>
+          <span style="color:#64748b;font-size:11px">${o.browser || 'Unknown'} · ${o.os || 'Unknown'}</span>
+        </div>`).join('');
     }
 
     document.getElementById('mainPanel').innerHTML = `
       <div class="thread-node">
-        <div class="node-subject">${t.subject || '(No Subject)'}</div>
-        <div class="recip-list"><strong>Sent to:</strong> ${recips}</div>
+        <div class="node-subject">${escHtml(t.subject || '(No Subject)')}</div>
+        <div class="meta-row">Sent: ${new Date(t.sentAt).toLocaleString()}</div>
+        <div class="recip-list" style="margin-top:8px">${recips}</div>
         <div class="history-box">
-          <div class="h-title">Tracking History (${t.totalOpens} Total)</div>
+          <div class="h-title">Open History — ${t.totalOpens} total open${t.totalOpens !== 1 ? 's' : ''}</div>
           ${historyHtml}
         </div>
-      </div>
-    `;
+      </div>`;
   }
+
+  // ── Refresh ───────────────────────────────────────────────────────────────
+
+  document.getElementById('btnRefresh').onclick = async function() {
+    const btn = this;
+    btn.textContent = '↻ Refreshing…';
+    btn.disabled = true;
+    await Promise.all([loadStats(), loadEmails()]);
+    setTimeout(() => { btn.textContent = '↻ Refresh'; btn.disabled = false; }, 400);
+  };
+
+  // FIX: auto-refresh every 15 seconds so opens appear without manual action
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    AUTO_REFRESH_TIMER = setInterval(async () => {
+      document.getElementById('refreshStatus').textContent = 'Refreshing…';
+      await Promise.all([loadStats(), loadEmails()]);
+      document.getElementById('refreshStatus').textContent = 'Auto-refresh: on';
+    }, 15000);
+  }
+
+  function stopAutoRefresh() {
+    if (AUTO_REFRESH_TIMER) { clearInterval(AUTO_REFRESH_TIMER); AUTO_REFRESH_TIMER = null; }
+  }
+
+  // ── Utility ───────────────────────────────────────────────────────────────
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
   checkAuth();
 </script>
 </body>
