@@ -220,19 +220,34 @@
     }
     list.innerHTML = emails.map((em, i) => `
       <div class="email-card ${i === 0 ? 'active' : ''}" id="card-${em._id}" onclick="selectCard(this,'${em._id}')">
-        <div class="ec-subject">${em.subject || '(No Subject)'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px;">
+          <div class="ec-subject" style="flex:1;">${em.subject || '(No Subject)'}</div>
+          <button onclick="deleteEmail(event,'${em._id}')" style="background:#dc2626;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:11px;flex-shrink:0;">✕</button>
+        </div>
         <div class="ec-meta">
           <span>${new Date(em.sentAt).toLocaleDateString()}</span>
-          <span>${em.recipients?.length || 0} recipient${em.recipients?.length !== 1 ? 's' : ''}</span>
+          <span>${em.recipients?.length || 0} to</span>
         </div>
         <div class="ec-badges">
           <span class="badge ${em.unopened ? 'b-unopen' : 'b-open'}">
-            ${em.unopened ? '✗ Unopened' : '✓ Opened ' + em.openCount + 'x'}
+            ${em.unopened ? '✗ Unopened' : '✓ ' + em.openCount + 'x'}
           </span>
-          ${(em.replyCount || 0) > 0 ? `<span class="badge b-reply">↩ ${em.replyCount} follow-up${em.replyCount > 1 ? 's' : ''}</span>` : ''}
+          ${(em.replyCount || 0) > 0 ? `<span class="badge b-reply">↩ ${em.replyCount}</span>` : ''}
         </div>
       </div>
     `).join('');
+  }
+
+  async function deleteEmail(e, id) {
+    e.stopPropagation();
+    if (!confirm('Delete this email?')) return;
+    try {
+      await fetch(SERVER + `/api/emails/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${TOKEN}` }
+      });
+      await loadEmails();
+    } catch(e) { alert('Delete failed'); }
   }
 
   function selectCard(el, id) {
