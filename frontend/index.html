@@ -156,7 +156,16 @@
   });
 
   document.getElementById('btnLogoutHeader').addEventListener('click', logout);
-  document.getElementById('btnRefresh').addEventListener('click', loadEmails);
+  document.getElementById('btnRefresh').addEventListener('click', async function() {
+    const btn = this;
+    btn.textContent = '↻ Refreshing...'; // Visual feedback!
+    btn.style.opacity = '0.7';
+    await loadEmails();
+    setTimeout(() => {
+      btn.textContent = '↻ Refresh';
+      btn.style.opacity = '1';
+    }, 500); // Wait half a second so it doesn't flicker too fast
+  });
 
   function logout() {
     localStorage.removeItem('mailpulse_token');
