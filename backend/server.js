@@ -244,6 +244,9 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
 });
 
 // ─── SERVE DASHBOARD ─────────────────────────────────────────────────────────
+// Health check endpoint — use with UptimeRobot to keep server warm
+app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+
 app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'index.html')));
 
 app.listen(process.env.PORT || 5000, () => console.log('🚀 MailPulse server running'));
