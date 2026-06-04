@@ -246,6 +246,7 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
 // ─── SERVE DASHBOARD ─────────────────────────────────────────────────────────
 // Health check endpoint — use with UptimeRobot to keep server warm
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+app.get('/ping',   (req, res) => res.json({ status: 'ok', ts: Date.now() })); // UptimeRobot keep-alive
 
 app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'index.html')));
 
