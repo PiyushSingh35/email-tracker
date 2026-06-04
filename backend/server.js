@@ -1,523 +1,224 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const { google } = require('googleapis');
-const crypto = require('crypto');
-const UAParser = require('ua-parser-js');
-const path = require('path');
+var SERVER = 'https://email-tracker-em6b.onrender.com';
+var isLoggedIn = false;
+var trackingStates = {};
 
-const app = express();
+var loginIntervalId;
+var composeIntervalId;
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '../frontend')));
+function init() {
+  checkLogin();
+  watchCompose();
+  loginIntervalId = setInterval(checkLogin, 500);
+}
 
-// ─────────────────────────────────────────
-// DATABASE
-// ─────────────────────────────────────────
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB error:', err));
-
-// ─────────────────────────────────────────
-// SCHEMAS
-// ─────────────────────────────────────────
-
-const emailSchema = new mongoose.Schema({
-  senderEmail:    String,
-  subject:        String,
-  recipients: [{
-    email: String,
-    name:  String,
-    role:  { type: String, enum: ['to', 'cc', 'bcc'], default: 'to' }
-  }],
-  trackingId:     { type: String, unique: true },
-  createdAt:      { type: Date, default: Date.now },
-  sentAt:         Date,
-  status:         { type: String, enum: ['tracked', 'archived'], default: 'tracked' },
-  source:         { type: String, default: 'gmail-extension' },
-  parentEmailId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Email', default: null },
-  threadId:       { type: String, default: null },
-  isReply:        { type: Boolean, default: false },
-  replyDepth:     { type: Number, default: 0 }
-});
-
-const openEventSchema = new mongoose.Schema({
-  emailId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Email' },
-  trackingId:     String,
-  recipientEmail: String,
-  recipientRole:  { type: String, enum: ['to', 'cc', 'bcc', 'unknown'], default: 'unknown' },
-  openedAt:       { type: Date, default: Date.now },
-  userAgent:      String,
-  ipAddress:      String,
-  deviceInfo:     { browser: String, os: String, device: String },
-  isFromSender:   { type: Boolean, default: false }
-});
-
-const userSchema = new mongoose.Schema({
-  email:        String,
-  name:         String,
-  refreshToken: String,
-  accessToken:  String,
-  tokenExpiry:  Date,
-  senderIPs:    [String],
-  createdAt:    { type: Date, default: Date.now }
-});
-
-const Email     = mongoose.model('Email',     emailSchema);
-const OpenEvent = mongoose.model('OpenEvent', openEventSchema);
-const User      = mongoose.model('User',      userSchema);
-
-// ─────────────────────────────────────────
-// GOOGLE OAUTH
-// ─────────────────────────────────────────
-
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URL
-);
-
-const SCOPES = [
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/userinfo.profile'
-];
-
-app.get('/auth/google', (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: SCOPES,
-    prompt: 'consent'
-  });
-  res.redirect(url);
-});
-
-app.get('/auth/google/callback', async (req, res) => {
-  try {
-    const { code } = req.query;
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-    const { data: profile } = await oauth2.userinfo.get();
-
-    let user = await User.findOne({ email: profile.email });
-    if (!user) {
-      user = new User({
-        email:     profile.email,
-        name:      profile.name,
-        senderIPs: (process.env.SENDER_IPS || '').split(',').filter(Boolean)
-      });
-    }
-    user.refreshToken = tokens.refresh_token || user.refreshToken;
-    user.accessToken  = tokens.access_token;
-    user.tokenExpiry  = new Date(tokens.expiry_date);
-    await user.save();
-
-    const jwtToken = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    res.redirect(`/?token=${jwtToken}`);
-  } catch (error) {
-    console.error('OAuth error:', error);
-    res.status(500).send('Authentication failed');
+function checkLogin() {
+  if (!chrome.runtime || !chrome.runtime.id) {
+    clearInterval(loginIntervalId);
+    clearInterval(composeIntervalId);
+    return; 
   }
-});
 
-// ─────────────────────────────────────────
-// AUTH MIDDLEWARE
-// ─────────────────────────────────────────
-
-async function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-  try {
-    const token   = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user    = await User.findById(decoded.userId);
-    if (!user) return res.status(401).json({ error: 'User not found' });
-    req.user = user;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-}
-
-// ─────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────
-
-function generateId() {
-  return crypto.randomBytes(16).toString('hex');
-}
-
-function parseUA(ua) {
-  // Added fallback to prevent crashes if UA is undefined
-  const parser = new UAParser(ua || '');
-  const r = parser.getResult();
-  return {
-    browser: r.browser?.name || 'Unknown',
-    os:      r.os?.name      || 'Unknown',
-    device:  r.device?.type  || 'Desktop'
-  };
-}
-
-function getIP(req) {
-  // Added safe fallback for remoteAddress
-  return (req.headers['x-forwarded-for']?.split(',')[0].trim()) 
-    || req.socket?.remoteAddress 
-    || 'unknown';
-}
-
-function isSender(ip, user) {
-  if (!user || ip === 'unknown') return false;
-  const senderSet = new Set([
-    ...(user.senderIPs || []),
-    '127.0.0.1', '::1', '::ffff:127.0.0.1'
-  ]);
-  return senderSet.has(ip);
-}
-
-const PIXEL_GIF = Buffer.from(
-  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
-);
-
-// ─────────────────────────────────────────
-// PIXEL TRACKING
-// ─────────────────────────────────────────
-
-app.get('/track/pixel/:trackingId', async (req, res) => {
-  try {
-    const { trackingId } = req.params;
-    const recipientEmail = req.query.r || 'unknown';
+  chrome.storage.local.get('mailpulse_token', function(data) {
+    if (chrome.runtime.lastError) return; 
     
-    // FIX: Sanitize the role to prevent Mongoose validation crashes
-    let recipientRole = (req.query.role || 'unknown').toLowerCase();
-    const validRoles = ['to', 'cc', 'bcc', 'unknown'];
-    if (!validRoles.includes(recipientRole)) {
-      recipientRole = 'unknown'; 
+    var hasToken = !!(data && data.mailpulse_token);
+    if (hasToken != isLoggedIn) {
+      isLoggedIn = hasToken;
+      updateButtons();
     }
+  });
+}
 
-    const email = await Email.findOne({ trackingId });
+function updateButtons() {
+  var buttons = document.querySelectorAll('.mailpulse-btn');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].remove();
+  }
+  
+  setTimeout(function() {
+    var composes = document.querySelectorAll('.AD');
+    for (var j = 0; j < composes.length; j++) {
+      if (composes[j].getAttribute('data-mailpulse-id')) {
+        addButton(composes[j]);
+      }
+    }
+  }, 100);
+}
 
-    if (email) {
-      const ip         = getIP(req);
-      const user       = await User.findOne({ email: email.senderEmail });
-      const fromSender = isSender(ip, user);
+function generateUUID() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
 
-      if (!fromSender) {
-        await OpenEvent.create({
-          emailId:        email._id,
-          trackingId,
-          recipientEmail,
-          recipientRole,
-          userAgent:      req.headers['user-agent'] || 'unknown',
-          ipAddress:      ip,
-          deviceInfo:     parseUA(req.headers['user-agent']),
-          isFromSender:   false
-        });
+function watchCompose() {
+  composeIntervalId = setInterval(function() {
+    var composes = document.querySelectorAll('.AD');
+    for (var i = 0; i < composes.length; i++) {
+      var id = composes[i].getAttribute('data-mailpulse-id');
+      if (!id) {
+        id = generateUUID();
+        composes[i].setAttribute('data-mailpulse-id', id);
+        trackingStates[id] = true;
+        addButton(composes[i]);
+        injectPixel(composes[i], id);
+      }
+    }
+  }, 600);
+}
+
+function injectPixel(win, id) {
+  var body = win.querySelector('[contenteditable="true"]');
+  if (!body) return;
+  
+  var existing = body.querySelector('#mp-pixel-' + id);
+  
+  if (trackingStates[id]) {
+    if (!existing) {
+      var img = document.createElement('img');
+      img.id = 'mp-pixel-' + id;
+      img.src = SERVER + '/track/pixel/' + id + '?role=unknown';
+      img.style.cssText = 'width:1px;height:1px;display:none!important;opacity:0;';
+      body.appendChild(img);
+    }
+  } else {
+    if (existing) {
+      existing.remove();
+    }
+  }
+}
+
+function addButton(win) {
+  try {
+    var id = win.getAttribute('data-mailpulse-id');
+    if (!id) return;
+    
+    var toolbar = win.querySelector('.btC');
+    if (!toolbar) return;
+    
+    var old = toolbar.querySelector('.mailpulse-btn');
+    if (old) old.remove();
+
+    var btn = document.createElement('div');
+    
+    if (isLoggedIn) {
+      var isOn = trackingStates[id];
+      
+      btn.className = 'mailpulse-btn ' + (isOn ? 'mailpulse-active' : 'mailpulse-off');
+      btn.innerHTML = '<span class="mailpulse-dot"></span> ' + (isOn ? 'Tracking ON' : 'Tracking OFF');
+      
+      btn.onclick = function() {
+        trackingStates[id] = !trackingStates[id];
+        injectPixel(win, id);
+        addButton(win);
+      };
+
+      if (!win.getAttribute('data-mp-hooked')) {
+         var sendBtn = win.querySelector('[data-tooltip^="Send"]') || win.querySelector('[aria-label*="Send"]') || win.querySelector('.dC');
+         if (sendBtn) {
+           sendBtn.addEventListener('mousedown', function() {
+             if (trackingStates[id]) {
+               executeRegistration(win, id);
+             }
+           });
+         }
+
+         win.addEventListener('keydown', function(e) {
+             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                 if (trackingStates[id]) {
+                   executeRegistration(win, id);
+                 }
+             }
+         }, true);
+
+         win.setAttribute('data-mp-hooked', 'true');
       }
     } else {
-      console.log(`Tracking attempt failed: ID ${trackingId} not found in database.`);
+      btn.className = 'mailpulse-btn mailpulse-warning';
+      btn.innerHTML = '<span class="mailpulse-dot"></span> LOGIN';
+      btn.onclick = function() { window.open(SERVER); };
     }
-  } catch (e) {
-    console.error('Pixel tracking error:', e.message);
+    
+    toolbar.appendChild(btn);
+  } catch(e) {
+    console.log('Error', e);
+  }
+}
+
+function executeRegistration(win, id) {
+  var subjectBox = win.querySelector('[name="subjectbox"]');
+  var subject = subjectBox ? subjectBox.value : '(No Subject)';
+  
+  var toEmails = getEmails(win, 'to');
+  var ccEmails = getEmails(win, 'cc');
+  var bccEmails = getEmails(win, 'bcc');
+
+  var recipients = [];
+  for (var i = 0; i < toEmails.length; i++) {
+    recipients.push({ email: toEmails[i], role: 'to' });
+  }
+  for (var j = 0; j < ccEmails.length; j++) {
+    recipients.push({ email: ccEmails[j], role: 'cc' });
+  }
+  for (var k = 0; k < bccEmails.length; k++) {
+    recipients.push({ email: bccEmails[k], role: 'bcc' });
   }
 
-  // Enforce rigid caching rules so Gmail doesn't cache the image
-  res.set({
-    'Content-Type':  'image/gif',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-    'Pragma':        'no-cache',
-    'Expires':       '0'
-  });
-  res.send(PIXEL_GIF);
-});
+  if (recipients.length === 0) return;
 
-// ─────────────────────────────────────────
-// REGISTER EMAIL (compose or reply)
-// ─────────────────────────────────────────
-
-app.post('/api/track/register', authMiddleware, async (req, res) => {
-  try {
-    const {
-      subject, recipients, source,
-      parentEmailId, threadId, isReply, replyDepth
-    } = req.body;
-
-    const trackingId = req.body.trackingId || generateId();
-
-    let resolvedParentId = null;
-    let resolvedThreadId = threadId || generateId();
-    let resolvedDepth    = replyDepth || 0;
-
-    if (parentEmailId) {
-      const parent = await Email.findById(parentEmailId);
-      if (parent) {
-        resolvedParentId = parent._id;
-        resolvedThreadId = parent.threadId || resolvedThreadId;
-        resolvedDepth    = (parent.replyDepth || 0) + 1;
+  if (recipients.length === 1) {
+    var body = win.querySelector('[contenteditable="true"]');
+    if (body) {
+      var pixelImg = body.querySelector('#mp-pixel-' + id);
+      if (pixelImg) {
+        pixelImg.src = SERVER + '/track/pixel/' + id + '?r=' + encodeURIComponent(recipients[0].email) + '&role=' + recipients[0].role;
       }
     }
-
-    const email = await Email.create({
-      senderEmail:   req.user.email,
-      subject,
-      recipients,
-      trackingId,
-      sentAt:        new Date(),
-      status:        'tracked',
-      source:        source || 'gmail-extension',
-      parentEmailId: resolvedParentId,
-      threadId:      resolvedThreadId,
-      isReply:       isReply || false,
-      replyDepth:    resolvedDepth
-    });
-
-    res.json({
-      success:    true,
-      emailId:    email._id,
-      trackingId,
-      pixelUrl:   `${process.env.SERVER_URL}/track/pixel/${trackingId}`
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: error.message });
   }
-});
 
-// ─────────────────────────────────────────
-// GET USER INFO
-// ─────────────────────────────────────────
+  if (!chrome.runtime || !chrome.runtime.id) {
+    return; 
+  }
 
-app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({
-    email:     req.user.email,
-    name:      req.user.name,
-    senderIPs: req.user.senderIPs
+  chrome.storage.local.get('mailpulse_token', function(data) {
+    if (chrome.runtime.lastError) return;
+    
+    var token = data ? data.mailpulse_token : null;
+    if (!token) return;
+
+    fetch(SERVER + '/api/track/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ trackingId: id, subject: subject, recipients: recipients })
+    }).catch(function(err) {
+      console.log('MailPulse Registration Error:', err);
+    });
   });
-});
+}
 
-app.put('/api/me/ips', authMiddleware, async (req, res) => {
-  req.user.senderIPs = req.body.ips;
-  await req.user.save();
-  res.json({ success: true, senderIPs: req.user.senderIPs });
-});
-
-// ─────────────────────────────────────────
-// GET ALL TOP-LEVEL EMAILS (not replies)
-// ─────────────────────────────────────────
-
-app.get('/api/emails', authMiddleware, async (req, res) => {
-  try {
-    const emails = await Email.find({
-      senderEmail:   req.user.email,
-      parentEmailId: null
-    }).sort({ sentAt: -1 });
-
-    const enriched = await Promise.all(emails.map(async (em) => {
-      const openCount  = await OpenEvent.countDocuments({ emailId: em._id, isFromSender: false });
-      const lastOpen   = await OpenEvent.findOne({ emailId: em._id, isFromSender: false }).sort({ openedAt: -1 });
-      const replyCount = await Email.countDocuments({ threadId: em.threadId, parentEmailId: { $ne: null } });
-
-      return {
-        ...em.toObject(),
-        openCount,
-        lastOpenedAt: lastOpen?.openedAt || null,
-        unopened:     openCount === 0,
-        replyCount
-      };
-    }));
-
-    res.json(enriched);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─────────────────────────────────────────
-// GET EMAIL THREAD (original + all replies)
-// ─────────────────────────────────────────
-
-app.get('/api/emails/:id/thread', authMiddleware, async (req, res) => {
-  try {
-    const rootEmail = await Email.findById(req.params.id);
-    if (!rootEmail) return res.status(404).json({ error: 'Email not found' });
-
-    const allInThread = await Email.find({
-      threadId:    rootEmail.threadId,
-      senderEmail: req.user.email
-    }).sort({ sentAt: 1 });
-
-    const enriched = await Promise.all(allInThread.map(async (em) => {
-      const opens = await OpenEvent.find({ emailId: em._id, isFromSender: false }).sort({ openedAt: 1 });
-
-      const recipientMap = {};
-      em.recipients.forEach(r => {
-        recipientMap[r.email] = {
-          email:     r.email,
-          role:      r.role || 'to',
-          openCount: 0,
-          firstOpen: null,
-          lastOpen:  null,
-          status:    'unopened'
-        };
-      });
-
-      opens.forEach(o => {
-        if (recipientMap[o.recipientEmail]) {
-          recipientMap[o.recipientEmail].openCount++;
-          recipientMap[o.recipientEmail].status   = 'opened';
-          recipientMap[o.recipientEmail].lastOpen = o.openedAt;
-          if (!recipientMap[o.recipientEmail].firstOpen) {
-            recipientMap[o.recipientEmail].firstOpen = o.openedAt;
+function getEmails(win, field) {
+  var emails = [];
+  var elements = win.querySelectorAll('[aria-label]');
+  for (var i = 0; i < elements.length; i++) {
+    var label = elements[i].getAttribute('aria-label');
+    if (label && label.toLowerCase().indexOf(field) > -1) {
+      var text = elements[i].textContent;
+      var matches = text.match(/[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+      if (matches) {
+        for (var j = 0; j < matches.length; j++) {
+          if (emails.indexOf(matches[j]) < 0) {
+            emails.push(matches[j]);
           }
         }
-      });
-
-      return {
-        ...em.toObject(),
-        totalOpens: opens.length,
-        unopened:   opens.length === 0,
-        byRole: {
-          to:  Object.values(recipientMap).filter(r => r.role === 'to'),
-          cc:  Object.values(recipientMap).filter(r => r.role === 'cc'),
-          bcc: Object.values(recipientMap).filter(r => r.role === 'bcc')
-        }
-      };
-    }));
-
-    function buildTree(emails, parentId = null) {
-      return emails
-        .filter(e => String(e.parentEmailId) === String(parentId))
-        .map(e => ({
-          ...e,
-          replies: buildTree(emails, e._id)
-        }));
-    }
-
-    const tree = enriched.filter(e => !e.parentEmailId);
-    tree.forEach(root => {
-      root.replies = buildTree(enriched, root._id);
-    });
-
-    res.json({ thread: tree[0] || enriched[0] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─────────────────────────────────────────
-// EMAIL ANALYTICS
-// ─────────────────────────────────────────
-
-app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
-  try {
-    const email = await Email.findById(req.params.id);
-    if (!email) return res.status(404).json({ error: 'Email not found' });
-
-    const opens = await OpenEvent.find({ emailId: email._id, isFromSender: false }).sort({ openedAt: 1 });
-
-    const recipientMap = {};
-    email.recipients.forEach(r => {
-      recipientMap[r.email] = {
-        email:     r.email,
-        name:      r.name || '',
-        role:      r.role || 'to',
-        opens:     [],
-        openCount: 0,
-        firstOpen: null,
-        lastOpen:  null,
-        status:    'unopened'
-      };
-    });
-
-    opens.forEach(o => {
-      const key = o.recipientEmail;
-      if (recipientMap[key]) {
-        recipientMap[key].opens.push({ openedAt: o.openedAt, device: o.deviceInfo });
-        recipientMap[key].openCount++;
-        recipientMap[key].lastOpen = o.openedAt;
-        recipientMap[key].status   = 'opened';
-        if (!recipientMap[key].firstOpen) recipientMap[key].firstOpen = o.openedAt;
       }
-    });
-
-    const byRole = {
-      to:  Object.values(recipientMap).filter(r => r.role === 'to'),
-      cc:  Object.values(recipientMap).filter(r => r.role === 'cc'),
-      bcc: Object.values(recipientMap).filter(r => r.role === 'bcc')
-    };
-
-    res.json({
-      email:      email.toObject(),
-      totalOpens: opens.length,
-      firstOpen:  opens[0]?.openedAt || null,
-      lastOpen:   opens[opens.length - 1]?.openedAt || null,
-      byRole
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    }
   }
-});
+  return emails;
+}
 
-// ─────────────────────────────────────────
-// STATS
-// ─────────────────────────────────────────
-
-app.get('/api/stats', authMiddleware, async (req, res) => {
-  try {
-    const emailIds    = await Email.find({ senderEmail: req.user.email }).distinct('_id');
-    const totalEmails = emailIds.length;
-    const totalOpens  = await OpenEvent.countDocuments({ emailId: { $in: emailIds }, isFromSender: false });
-    const openedIds   = await OpenEvent.find({ emailId: { $in: emailIds }, isFromSender: false }).distinct('emailId');
-
-    res.json({
-      totalEmails,
-      totalOpens,
-      totalClicks: 0,
-      openRate: totalEmails ? Math.round((openedIds.length / totalEmails) * 100) : 0
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─────────────────────────────────────────
-// DELETE EMAIL
-// ─────────────────────────────────────────
-
-app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
-  try {
-    await Email.findByIdAndDelete(req.params.id);
-    await OpenEvent.deleteMany({ emailId: req.params.id });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─────────────────────────────────────────
-// SERVE FRONTEND
-// ─────────────────────────────────────────
-
-// Health check - keeps Render awake
-app.get("/ping", (req, res) => res.json({ status: "ok", time: new Date() }));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 MailPulse running at http://localhost:${PORT}`);
-  console.log(`📧 Login at http://localhost:${PORT}/auth/google\n`);
-});
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
