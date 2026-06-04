@@ -253,7 +253,7 @@ app.post('/api/track/register', authMiddleware, async (req, res) => {
       parentEmailId, threadId, isReply, replyDepth
     } = req.body;
 
-    const trackingId = generateId();
+    const trackingId = req.body.trackingId || generateId();
 
     let resolvedParentId = null;
     let resolvedThreadId = threadId || generateId();
