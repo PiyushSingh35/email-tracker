@@ -61,6 +61,7 @@
 
 <script>
   let TOKEN = null;
+  let CURRENT_EMAIL_ID = null; // This remembers which email you are looking at!
   const SERVER = 'https://email-tracker-em6b.onrender.com';
 
   async function checkAuth() {
@@ -75,7 +76,22 @@
 
   document.getElementById('btnLoginGoogle').onclick = () => window.location.href = SERVER + '/auth/google';
   document.getElementById('btnLogout').onclick = () => { localStorage.removeItem('mailpulse_token'); window.location.reload(); };
-  document.getElementById('btnRefresh').onclick = () => { loadStats(); loadEmails(); };
+  
+  // 🚨 THE FIX: Brought back the visual animation!
+  document.getElementById('btnRefresh').onclick = async function() {
+    const btn = this;
+    btn.textContent = '↻ Refreshing...';
+    btn.style.opacity = '0.5';
+    btn.disabled = true;
+    
+    await Promise.all([loadStats(), loadEmails()]);
+    
+    setTimeout(() => {
+      btn.textContent = '↻ Refresh';
+      btn.style.opacity = '1';
+      btn.disabled = false;
+    }, 400);
+  };
 
   function show(id) {
     document.getElementById('loginScreen').style.display = id === 'loginScreen' ? 'flex' : 'none';
@@ -93,20 +109,30 @@
     document.getElementById('statOpens').textContent = s.totalOpens;
   }
 
+  // 🚨 THE FIX: Remembers your selected email after a refresh!
   async function loadEmails() {
     const emails = await apiFetch('/api/emails');
-    document.getElementById('emailList').innerHTML = emails.map((em, i) => `
-      <div class="email-card ${i===0?'active':''}" onclick="selectCard(this,'${em._id}')">
+    document.getElementById('emailList').innerHTML = emails.map((em, i) => {
+      const isActive = CURRENT_EMAIL_ID ? em._id === CURRENT_EMAIL_ID : i === 0;
+      return `
+      <div class="email-card ${isActive ? 'active' : ''}" onclick="selectCard(this,'${em._id}')">
         <div class="ec-subject">${em.subject || '(No Subject)'}</div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span class="badge ${em.unopened ? 'b-unopen' : 'b-open'}">${em.unopened ? '✗ Unopened' : '✓ ' + em.openCount + ' Opens'}</span>
           <span style="font-size:10px;color:#64748b">${new Date(em.sentAt).toLocaleDateString()}</span>
         </div>
-      </div>`).join('') || '<div style="text-align:center;color:#64748b;padding:20px">No emails tracked yet.</div>';
-    if(emails.length) loadThread(emails[0]._id);
+      </div>`;
+    }).join('') || '<div style="text-align:center;color:#64748b;padding:20px">No emails tracked yet.</div>';
+    
+    if(emails.length) {
+      const idToLoad = CURRENT_EMAIL_ID && emails.some(e => e._id === CURRENT_EMAIL_ID) ? CURRENT_EMAIL_ID : emails[0]._id;
+      if (!CURRENT_EMAIL_ID) CURRENT_EMAIL_ID = idToLoad;
+      loadThread(idToLoad);
+    }
   }
 
   function selectCard(el, id) {
+    CURRENT_EMAIL_ID = id;
     document.querySelectorAll('.email-card').forEach(c => c.classList.remove('active'));
     el.classList.add('active');
     loadThread(id);
@@ -122,7 +148,7 @@
       historyHtml = t.opens.map(o => `
         <div class="open-row">
           <span style="color:#34d399;font-weight:bold;margin-right:10px">✓ Opened</span>
-          ${new Date(o.time).toLocaleString()} <span style="color:#64748b;font-size:11px;margin-left:10px">(${o.os || 'Unknown Device'})</span>
+          ${new Date(o.time).toLocaleString()} <span style="color:#64748b;font-size:11px;margin-left:10px">(${o.browser || 'Unknown Browser'} on ${o.os || 'Unknown Device'})</span>
         </div>
       `).join('');
     }
