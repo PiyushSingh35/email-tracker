@@ -10,9 +10,6 @@ const path = require('path');
 
 const app = express();
 
-// ─────────────────────────────────────────
-// MIDDLEWARE
-// ─────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,7 +38,12 @@ const emailSchema = new mongoose.Schema({
   createdAt:      { type: Date, default: Date.now },
   sentAt:         Date,
   status:         { type: String, enum: ['tracked', 'archived'], default: 'tracked' },
-  source:         { type: String, default: 'gmail-extension' }
+  source:         { type: String, default: 'gmail-extension' },
+  // Thread/reply support
+  parentEmailId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Email', default: null },
+  threadId:       { type: String, default: null },
+  isReply:        { type: Boolean, default: false },
+  replyDepth:     { type: Number, default: 0 }
 });
 
 const openEventSchema = new mongoose.Schema({
@@ -66,9 +68,9 @@ const userSchema = new mongoose.Schema({
   createdAt:    { type: Date, default: Date.now }
 });
 
-const Email      = mongoose.model('Email',      emailSchema);
-const OpenEvent  = mongoose.model('OpenEvent',  openEventSchema);
-const User       = mongoose.model('User',       userSchema);
+const Email     = mongoose.model('Email',     emailSchema);
+const OpenEvent = mongoose.model('OpenEvent', openEventSchema);
+const User      = mongoose.model('User',      userSchema);
 
 // ─────────────────────────────────────────
 // GOOGLE OAUTH
@@ -182,7 +184,6 @@ function isSender(ip, user) {
   return senderSet.has(ip);
 }
 
-// 1x1 transparent GIF
 const PIXEL_GIF = Buffer.from(
   'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
 );
@@ -231,29 +232,51 @@ app.get('/track/pixel/:trackingId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// EXTENSION - REGISTER TRACKED EMAIL
+// REGISTER EMAIL (compose or reply)
 // ─────────────────────────────────────────
 
 app.post('/api/track/register', authMiddleware, async (req, res) => {
   try {
-    const { subject, recipients, source } = req.body;
+    const {
+      subject, recipients, source,
+      parentEmailId, threadId, isReply, replyDepth
+    } = req.body;
+
     const trackingId = generateId();
 
+    // If this is a reply, find parent to link thread
+    let resolvedParentId = null;
+    let resolvedThreadId = threadId || generateId();
+    let resolvedDepth    = replyDepth || 0;
+
+    if (parentEmailId) {
+      const parent = await Email.findById(parentEmailId);
+      if (parent) {
+        resolvedParentId = parent._id;
+        resolvedThreadId = parent.threadId || resolvedThreadId;
+        resolvedDepth    = (parent.replyDepth || 0) + 1;
+      }
+    }
+
     const email = await Email.create({
-      senderEmail: req.user.email,
+      senderEmail:   req.user.email,
       subject,
       recipients,
       trackingId,
-      sentAt:  new Date(),
-      status:  'tracked',
-      source:  source || 'gmail-extension'
+      sentAt:        new Date(),
+      status:        'tracked',
+      source:        source || 'gmail-extension',
+      parentEmailId: resolvedParentId,
+      threadId:      resolvedThreadId,
+      isReply:       isReply || false,
+      replyDepth:    resolvedDepth
     });
 
     res.json({
       success:    true,
       emailId:    email._id,
       trackingId,
-      pixelUrl: `${process.env.SERVER_URL}/track/pixel/${trackingId}`
+      pixelUrl:   `${process.env.SERVER_URL}/track/pixel/${trackingId}`
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -280,21 +303,28 @@ app.put('/api/me/ips', authMiddleware, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// GET ALL TRACKED EMAILS
+// GET ALL TOP-LEVEL EMAILS (not replies)
 // ─────────────────────────────────────────
 
 app.get('/api/emails', authMiddleware, async (req, res) => {
   try {
-    const emails = await Email.find({ senderEmail: req.user.email }).sort({ sentAt: -1 });
+    // Only get top-level emails (not replies)
+    const emails = await Email.find({
+      senderEmail:   req.user.email,
+      parentEmailId: null
+    }).sort({ sentAt: -1 });
 
     const enriched = await Promise.all(emails.map(async (em) => {
-      const openCount = await OpenEvent.countDocuments({ emailId: em._id, isFromSender: false });
-      const lastOpen  = await OpenEvent.findOne({ emailId: em._id, isFromSender: false }).sort({ openedAt: -1 });
-      return { 
-        ...em.toObject(), 
-        openCount, 
+      const openCount  = await OpenEvent.countDocuments({ emailId: em._id, isFromSender: false });
+      const lastOpen   = await OpenEvent.findOne({ emailId: em._id, isFromSender: false }).sort({ openedAt: -1 });
+      const replyCount = await Email.countDocuments({ threadId: em.threadId, parentEmailId: { $ne: null } });
+
+      return {
+        ...em.toObject(),
+        openCount,
         lastOpenedAt: lastOpen?.openedAt || null,
-        unopened: openCount === 0
+        unopened:     openCount === 0,
+        replyCount
       };
     }));
 
@@ -305,7 +335,82 @@ app.get('/api/emails', authMiddleware, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// EMAIL ANALYTICS (Per-recipient breakdown)
+// GET EMAIL THREAD (original + all replies)
+// ─────────────────────────────────────────
+
+app.get('/api/emails/:id/thread', authMiddleware, async (req, res) => {
+  try {
+    const rootEmail = await Email.findById(req.params.id);
+    if (!rootEmail) return res.status(404).json({ error: 'Email not found' });
+
+    // Get all emails in this thread
+    const allInThread = await Email.find({
+      threadId:    rootEmail.threadId,
+      senderEmail: req.user.email
+    }).sort({ sentAt: 1 });
+
+    // Enrich each with open data
+    const enriched = await Promise.all(allInThread.map(async (em) => {
+      const opens = await OpenEvent.find({ emailId: em._id, isFromSender: false }).sort({ openedAt: 1 });
+
+      const recipientMap = {};
+      em.recipients.forEach(r => {
+        recipientMap[r.email] = {
+          email:     r.email,
+          role:      r.role || 'to',
+          openCount: 0,
+          firstOpen: null,
+          lastOpen:  null,
+          status:    'unopened'
+        };
+      });
+
+      opens.forEach(o => {
+        if (recipientMap[o.recipientEmail]) {
+          recipientMap[o.recipientEmail].openCount++;
+          recipientMap[o.recipientEmail].status   = 'opened';
+          recipientMap[o.recipientEmail].lastOpen = o.openedAt;
+          if (!recipientMap[o.recipientEmail].firstOpen) {
+            recipientMap[o.recipientEmail].firstOpen = o.openedAt;
+          }
+        }
+      });
+
+      return {
+        ...em.toObject(),
+        totalOpens: opens.length,
+        unopened:   opens.length === 0,
+        byRole: {
+          to:  Object.values(recipientMap).filter(r => r.role === 'to'),
+          cc:  Object.values(recipientMap).filter(r => r.role === 'cc'),
+          bcc: Object.values(recipientMap).filter(r => r.role === 'bcc')
+        }
+      };
+    }));
+
+    // Build tree structure
+    function buildTree(emails, parentId = null) {
+      return emails
+        .filter(e => String(e.parentEmailId) === String(parentId))
+        .map(e => ({
+          ...e,
+          replies: buildTree(emails, e._id)
+        }));
+    }
+
+    const tree = enriched.filter(e => !e.parentEmailId);
+    tree.forEach(root => {
+      root.replies = buildTree(enriched, root._id);
+    });
+
+    res.json({ thread: tree[0] || enriched[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────
+// EMAIL ANALYTICS
 // ─────────────────────────────────────────
 
 app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
@@ -315,75 +420,43 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
 
     const opens = await OpenEvent.find({ emailId: email._id, isFromSender: false }).sort({ openedAt: 1 });
 
-    // Build per-recipient map
     const recipientMap = {};
     email.recipients.forEach(r => {
       recipientMap[r.email] = {
-        email:      r.email,
-        name:       r.name || '',
-        role:       r.role || 'to',
-        opens:      [],
-        openCount:  0,
-        firstOpen:  null,
-        lastOpen:   null,
-        status:     'unopened'
+        email:     r.email,
+        name:      r.name || '',
+        role:      r.role || 'to',
+        opens:     [],
+        openCount: 0,
+        firstOpen: null,
+        lastOpen:  null,
+        status:    'unopened'
       };
     });
 
-    // Assign opens to recipients
     opens.forEach(o => {
       const key = o.recipientEmail;
       if (recipientMap[key]) {
-        recipientMap[key].opens.push({
-          openedAt: o.openedAt,
-          device:   o.deviceInfo
-        });
+        recipientMap[key].opens.push({ openedAt: o.openedAt, device: o.deviceInfo });
         recipientMap[key].openCount++;
-        recipientMap[key].lastOpen  = o.openedAt;
-        recipientMap[key].status    = 'opened';
-        if (!recipientMap[key].firstOpen) {
-          recipientMap[key].firstOpen = o.openedAt;
-        }
+        recipientMap[key].lastOpen = o.openedAt;
+        recipientMap[key].status   = 'opened';
+        if (!recipientMap[key].firstOpen) recipientMap[key].firstOpen = o.openedAt;
       }
     });
 
-    // Separate by role
     const byRole = {
       to:  Object.values(recipientMap).filter(r => r.role === 'to'),
       cc:  Object.values(recipientMap).filter(r => r.role === 'cc'),
       bcc: Object.values(recipientMap).filter(r => r.role === 'bcc')
     };
 
-    // Device breakdown
-    const devices = {};
-    opens.forEach(o => {
-      const key = `${o.deviceInfo?.browser} / ${o.deviceInfo?.os}`;
-      devices[key] = (devices[key] || 0) + 1;
-    });
-
-    // Opens by date
-    const opensByDate = {};
-    opens.forEach(o => {
-      const day = o.openedAt.toISOString().slice(0, 10);
-      opensByDate[day] = (opensByDate[day] || 0) + 1;
-    });
-
     res.json({
       email:      email.toObject(),
       totalOpens: opens.length,
-      uniqueIPs:  new Set(opens.map(o => o.ipAddress)).size,
       firstOpen:  opens[0]?.openedAt || null,
       lastOpen:   opens[opens.length - 1]?.openedAt || null,
-      opens:      opens.map(o => ({
-        openedAt:  o.openedAt,
-        device:    o.deviceInfo,
-        ip:        o.ipAddress,
-        recipient: o.recipientEmail,
-        role:      o.recipientRole
-      })),
-      byRole,
-      opensByDate,
-      devices
+      byRole
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -391,19 +464,20 @@ app.get('/api/emails/:id/analytics', authMiddleware, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// DASHBOARD STATS
+// STATS
 // ─────────────────────────────────────────
 
 app.get('/api/stats', authMiddleware, async (req, res) => {
   try {
-    const emailIds      = await Email.find({ senderEmail: req.user.email }).distinct('_id');
-    const totalEmails   = emailIds.length;
-    const totalOpens    = await OpenEvent.countDocuments({ emailId: { $in: emailIds }, isFromSender: false });
-    const openedIds     = await OpenEvent.find({ emailId: { $in: emailIds }, isFromSender: false }).distinct('emailId');
+    const emailIds    = await Email.find({ senderEmail: req.user.email }).distinct('_id');
+    const totalEmails = emailIds.length;
+    const totalOpens  = await OpenEvent.countDocuments({ emailId: { $in: emailIds }, isFromSender: false });
+    const openedIds   = await OpenEvent.find({ emailId: { $in: emailIds }, isFromSender: false }).distinct('emailId');
 
     res.json({
       totalEmails,
       totalOpens,
+      totalClicks: 0,
       openRate: totalEmails ? Math.round((openedIds.length / totalEmails) * 100) : 0
     });
   } catch (error) {
@@ -432,10 +506,6 @@ app.delete('/api/emails/:id', authMiddleware, async (req, res) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
-
-// ─────────────────────────────────────────
-// START SERVER
-// ─────────────────────────────────────────
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
