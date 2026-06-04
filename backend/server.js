@@ -91,29 +91,27 @@ async function authMiddleware(req, res, next) {
 }
 
 function getIP(req) { return (req.headers['x-forwarded-for']?.split(',')[0].trim()) || req.socket?.remoteAddress || 'unknown'; }
-function isSender(ip, user) { return user && ip !== 'unknown' && new Set([...(user.senderIPs || []), '127.0.0.1', '::1', '::ffff:127.0.0.1']).has(ip); }
 function parseUA(ua) { const r = new UAParser(ua || '').getResult(); return { browser: r.browser?.name || 'Unknown', os: r.os?.name || 'Unknown' }; }
 
 const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
-// PIXEL TRACKING - Aggregate Only
+// ─────────────────────────────────────────
+// PIXEL TRACKING - Aggregate Only (NO IP BLOCK)
+// ─────────────────────────────────────────
 app.get('/track/pixel/:trackingId', async (req, res) => {
   try {
     const email = await Email.findOne({ trackingId: req.params.trackingId });
     if (email) {
-      const ip = getIP(req);
-      const user = await User.findOne({ email: email.senderEmail });
       
-      // STRICT SECURITY: Only tracks if it is NOT your IP
-      if (!isSender(ip, user)) {
-        await OpenEvent.create({
-          emailId: email._id,
-          trackingId: req.params.trackingId,
-          ipAddress: ip,
-          deviceInfo: parseUA(req.headers['user-agent']),
-          isFromSender: false
-        });
-      }
+      // 🚨 THE FIX: IP Blocker completely removed. It will now track EVERY open, even from your own computer.
+      await OpenEvent.create({
+        emailId: email._id,
+        trackingId: req.params.trackingId,
+        ipAddress: getIP(req),
+        deviceInfo: parseUA(req.headers['user-agent']),
+        isFromSender: false // Forced to false so the dashboard never filters it out
+      });
+
     }
   } catch (e) { console.error('Pixel error:', e.message); }
   res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' });
@@ -161,12 +159,11 @@ app.get('/api/emails/:id/thread', authMiddleware, async (req, res) => {
 
     const thread = await Email.find({ threadId: root.threadId, senderEmail: req.user.email }).sort({ sentAt: 1 });
     const enriched = await Promise.all(thread.map(async (em) => {
-      // Returns a clean array of every single open timestamp for this email
       const opens = await OpenEvent.find({ emailId: em._id, isFromSender: false }).sort({ openedAt: -1 });
       return { 
         ...em.toObject(), 
         totalOpens: opens.length, 
-        opens: opens.map(o => ({ time: o.openedAt, os: o.deviceInfo?.os })) 
+        opens: opens.map(o => ({ time: o.openedAt, os: o.deviceInfo?.os, browser: o.deviceInfo?.browser })) 
       };
     }));
 
