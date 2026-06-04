@@ -192,6 +192,14 @@ const PIXEL_GIF = Buffer.from(
 // PIXEL TRACKING
 // ─────────────────────────────────────────
 
+// ─────────────────────────────────────────
+// PIXEL TRACKING
+// ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// PIXEL TRACKING
+// ─────────────────────────────────────────
+
 app.get('/track/pixel/:trackingId', async (req, res) => {
   try {
     const { trackingId } = req.params;
@@ -206,24 +214,17 @@ app.get('/track/pixel/:trackingId', async (req, res) => {
     const email = await Email.findOne({ trackingId });
 
     if (email) {
-      const ip         = getIP(req);
-      const user       = await User.findOne({ email: email.senderEmail });
-      const fromSender = isSender(ip, user);
-
-      if (!fromSender) {
-        await OpenEvent.create({
-          emailId:        email._id,
-          trackingId,
-          recipientEmail,
-          recipientRole,
-          userAgent:      req.headers['user-agent'] || 'unknown',
-          ipAddress:      ip,
-          deviceInfo:     parseUA(req.headers['user-agent']),
-          isFromSender:   false
-        });
-      }
-    } else {
-      console.log(`Tracking attempt failed: ID ${trackingId} not found in database.`);
+      // 🚨 FIX: Removed the IP blocker. This will now track EVERYTHING.
+      await OpenEvent.create({
+        emailId:        email._id,
+        trackingId,
+        recipientEmail,
+        recipientRole,
+        userAgent:      req.headers['user-agent'] || 'unknown',
+        ipAddress:      getIP(req),
+        deviceInfo:     parseUA(req.headers['user-agent']),
+        isFromSender:   false // Forced to false so the dashboard always displays it
+      });
     }
   } catch (e) {
     console.error('Pixel tracking error:', e.message);
