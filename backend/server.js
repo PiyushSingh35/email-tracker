@@ -512,3 +512,7 @@ app.listen(PORT, () => {
   console.log(`\n🚀 MailPulse running at http://localhost:${PORT}`);
   console.log(`📧 Login at http://localhost:${PORT}/auth/google\n`);
 });
+// Health check - keeps Render awake
+app.get('/ping', (req, res) => {
+  res.json({ status: 'ok', time: new Date() });
+});
